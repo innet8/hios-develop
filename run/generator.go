@@ -1,9 +1,8 @@
-package constant
+package run
 
 import (
 	"bytes"
 	"github.com/innet8/hios/pkg/logger"
-	"github.com/innet8/hios/run"
 	"strings"
 	"text/template"
 )
@@ -27,9 +26,9 @@ func InstallBase(nodeName string) string {
 	var sb strings.Builder
 	sb.Write([]byte(installBase))
 	var envMap = make(map[string]interface{})
-	envMap["SERVER_URL"] = run.InConf.Server
+	envMap["SERVER_URL"] = InConf.Server
 	envMap["NODE_NAME"] = nodeName
-	envMap["NODE_TOKEN"] = run.InConf.Token
-	envMap["SWAP_FILE"] = run.InConf.Swap
+	envMap["NODE_TOKEN"] = InConf.Token
+	envMap["SWAP_FILE"] = InConf.Swap
 	return templateContent(sb.String(), envMap)
 }

@@ -2,7 +2,6 @@ package run
 
 import (
 	"fmt"
-	"github.com/innet8/hios/constant"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -49,7 +48,7 @@ func InstallNode() {
 	}
 
 	// 生成base文件，并赋可执行权限
-	WriteFile(baseFile, constant.InstallBase(nodeName))
+	WriteFile(baseFile, InstallBase(nodeName))
 	err = os.Chmod(baseFile, 0755)
 	if err != nil {
 		InstallPrintResult(done, fmt.Sprintf("Failed to create base file: %s\n", err.Error()))

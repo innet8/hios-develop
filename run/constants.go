@@ -1,4 +1,4 @@
-package constant
+package run
 
 const installBase = string(`#!/bin/bash
 #fonts color
