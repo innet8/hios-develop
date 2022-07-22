@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/innet8/hios/install"
+	"github.com/innet8/hios/run"
 	"github.com/spf13/cobra"
 )
 
@@ -10,7 +10,7 @@ var testCmd = &cobra.Command{
 	Use:   "test",
 	Short: "Test",
 	Run: func(cmd *cobra.Command, args []string) {
-		install.BuildTest()
+		run.BuildTest()
 	},
 }
 
