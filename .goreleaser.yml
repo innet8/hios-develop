@@ -1,0 +1,155 @@
+project_name: hios
+
+env:
+  - GO111MODULE=on
+
+build:
+  env:
+    - CGO_ENABLED=0
+  ldflags:
+    - -s -w -X github.com/innet8/hios/version.Version={{ .Version }} -X github.com/innet8/hios/version.CommitSHA={{ .ShortCommit }}
+  main: main.go
+  binary: hios
+  goos:
+    - darwin
+    - linux
+  goarch:
+    - amd64
+    - arm64
+
+archives:
+  -
+    name_template: "{{.Os}}-{{.Arch}}{{if .Arm}}v{{.Arm}}{{end}}-{{ .ProjectName }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+dockers:
+  -
+    dockerfile: docker/manage.Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/amd64"
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "innet8/hios:manage-{{ .Tag }}-amd64"
+    extra_files:
+      - docker/entrypoint.sh
+  -
+    dockerfile: docker/manage.Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm64"
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "innet8/hios:manage-{{ .Tag }}-arm64"
+    extra_files:
+      - docker/entrypoint.sh
+  -
+    dockerfile: docker/nginx.Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/amd64"
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "innet8/hios:nginx-{{ .Tag }}-amd64"
+    extra_files:
+      - docker/entrypoint.sh
+      - docker/conf/nginx.conf
+  -
+    dockerfile: docker/nginx.Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm64"
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "innet8/hios:nginx-{{ .Tag }}-arm64"
+    extra_files:
+      - docker/entrypoint.sh
+      - docker/conf/nginx.conf
+  -
+    dockerfile: docker/work.Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/amd64"
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "innet8/hios:work-{{ .Tag }}-amd64"
+    extra_files:
+      - docker/entrypoint.sh
+      - docker/conf/dnsmasq.conf
+      - docker/conf/resolv.conf
+      - docker/conf/resolv.dnsmasq.conf
+      - docker/conf/sysctl.conf
+      - docker/xray/xray.sh
+  -
+    dockerfile: docker/work.Dockerfile
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.name={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--platform=linux/arm64"
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "innet8/hios:work-{{ .Tag }}-arm64"
+    extra_files:
+      - docker/entrypoint.sh
+      - docker/conf/dnsmasq.conf
+      - docker/conf/resolv.conf
+      - docker/conf/resolv.dnsmasq.conf
+      - docker/conf/sysctl.conf
+      - docker/xray/xray.sh
+docker_manifests:
+  - name_template: "innet8/hios:manage-{{ .Tag }}"
+    image_templates:
+      - "innet8/hios:manage-{{ .Tag }}-amd64"
+      - "innet8/hios:manage-{{ .Tag }}-arm64"
+  - name_template: "innet8/hios:nginx-{{ .Tag }}"
+    image_templates:
+      - "innet8/hios:nginx-{{ .Tag }}-amd64"
+      - "innet8/hios:nginx-{{ .Tag }}-arm64"
+  - name_template: "innet8/hios:work-{{ .Tag }}"
+    image_templates:
+      - "innet8/hios:work-{{ .Tag }}-amd64"
+      - "innet8/hios:work-{{ .Tag }}-arm64"
