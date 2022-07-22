@@ -74,14 +74,14 @@ check_docker() {
 add_swap() {
     local swap=$(echo "$1"| awk '{print int($0)}')
     if [ "$swap" -gt "0" ]; then
-        if [ -z "$(swapon --show | grep 'hicloudswap')" ] || [ "$(cat /.hicloudswap_size)" != "$swap" ]; then
-            [ -n "$(swapon --show | grep 'hicloudswap')" ] && swapoff /hicloudswap;
-            dd if=/dev/zero of=/hicloudswap bs=1M count="$swap"
-            chmod 600 /hicloudswap
-            mkswap /hicloudswap
-            swapon /hicloudswap
-            echo "$swap" > /.hicloudswap_size
-            [ -z "$(cat /etc/fstab | grep '/hicloudswap')" ] && echo "/hicloudswap swap swap defaults 0 0" >> /etc/fstab
+        if [ -z "$(swapon --show | grep 'hicloud_swap')" ] || [ "$(cat /.hicloud_swap_size)" != "$swap" ]; then
+            [ -n "$(swapon --show | grep 'hicloud_swap')" ] && swapoff /hicloud_swap;
+            dd if=/dev/zero of=/hicloud_swap bs=1M count="$swap"
+            chmod 600 /hicloud_swap
+            mkswap /hicloud_swap
+            swapon /hicloud_swap
+            echo "$swap" > /.hicloud_swap_size
+            [ -z "$(cat /etc/fstab | grep '/hicloud_swap')" ] && echo "/hicloud_swap swap swap defaults 0 0" >> /etc/fstab
         fi
     fi
 }
@@ -96,11 +96,11 @@ add_supervisor() {
         sudo systemctl start supervisor
     fi
     #
-    touch /var/.hicloud/hios.sh
-    cat > /var/.hicloud/hios.sh <<-EOF
+    touch /usr/lib/hicloud/superdaemon
+    cat > /usr/lib/hicloud/superdaemon <<-EOF
 #!/bin/bash
-if [ -f "/var/.hicloud/hios" ]; then
-    chmod +x /var/.hicloud/hios
+if [ -f "/usr/lib/hicloud/hios" ]; then
+    chmod +x /usr/lib/hicloud/hios
     host=\$(echo "\$SERVER_URL" | awk -F "/" '{print \$3}')
     exi=\$(echo "\$SERVER_URL" | grep 'https://')
     if [ -n "\$exi" ]; then
@@ -108,14 +108,14 @@ if [ -f "/var/.hicloud/hios" ]; then
     else
         url="ws://\${host}/ws"
     fi
-    /var/.hicloud/hios work --server="\${url}?action=nodework&nodemode=\${NODE_MODE}&nodename=\${NODE_NAME}&nodetoken=\${NODE_TOKEN}&hostname=\${HOSTNAME}"
+    /usr/lib/hicloud/hios work --server="\${url}?action=nodework&nodemode=\${NODE_MODE}&nodename=\${NODE_NAME}&nodetoken=\${NODE_TOKEN}&hostname=\${HOSTNAME}"
 else
     echo "hios file does not exist"
     sleep 5
     exit 1
 fi
 EOF
-    chmod +x /var/.hicloud/hios.sh
+    chmod +x /usr/lib/hicloud/superdaemon
     #
     local superfile=/etc/supervisor/conf.d/hicloud.conf
     if [ -f /etc/supervisord.conf ]; then
@@ -124,8 +124,8 @@ EOF
     touch $superfile
     cat > $superfile <<-EOF
 [program:hicloud]
-directory=/var/.hicloud
-command=/bin/bash -c /var/.hicloud/hios.sh
+directory=/usr/lib/hicloud
+command=/bin/bash -c /usr/lib/hicloud/superdaemon
 numprocs=1
 autostart=true
 autorestart=true

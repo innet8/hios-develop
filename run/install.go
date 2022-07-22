@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	baseDir  = "/var/.hicloud/install"
-	baseFile = "/var/.hicloud/install/base"
-	hiosFile = "/var/.hicloud/hios"
+	baseDir  = "/usr/lib/hicloud/install"
+	baseFile = "/usr/lib/hicloud/install/base"
+	hiosFile = "/usr/lib/hicloud/hios"
 )
 
 func InstallNode() {
