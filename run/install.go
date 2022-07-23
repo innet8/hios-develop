@@ -98,7 +98,7 @@ func scriptInstallDone(done chan bool, nodeName string) {
 				"iver":      InConf.Iver,
 				"timestamp": timestamp,
 			}).
-			Post(fmt.Sprintf("%s/node/generate/success", InConf.Server))
+			Post(fmt.Sprintf("%s/api/node/generate/success", InConf.Server))
 
 		if err != nil || resp == nil {
 			InstallPrintResult(done, fmt.Sprintf("Failed to report node installation: %s\n", err.Error()))
