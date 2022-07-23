@@ -42,7 +42,7 @@ judge() {
 
 check_system() {
     sudo $PM update -y
-    sudo $PM install -y curl wget socat
+    sudo $PM install -y curl wget socat squashfs-tools
     judge "安装脚本依赖"
     #
     if [ "${PM}" = "yum" ]; then
@@ -72,7 +72,7 @@ check_docker() {
 }
 
 add_hicloud() {
-    docker network create --ipv6 -d bridge -o parent=eth1 --subnet 2001:db8::/64 --subnet 10.88.88.0/24 hicloud-net
+    docker network create --ipv6 -d bridge --subnet 2001:db8::/64 --subnet 10.88.88.0/24 hicloud-net
     mkdir vyos && cd vyos
     wget http://iso.hicloud.org/vyos-{{.IMAGE_VERSION}}-amd64.iso --no-check-certificate
     mkdir rootfs
