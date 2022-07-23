@@ -14,7 +14,7 @@ def upload_blob(bucket_name, source_file_name, destination_blob_name):
 if __name__ == '__main__':
     try:
         filename = sys.argv[1]
-        upload_blob('hicloud-iso', filename, filename)
+        upload_blob('iso.hicloud.org', filename, filename)
     except Exception as e:
         print("filename error")
         print(e)
