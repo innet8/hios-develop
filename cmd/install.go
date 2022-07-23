@@ -20,7 +20,7 @@ var installCmd = &cobra.Command{
 			run.PrintError(fmt.Sprintf(" %s arch is not supported", runtime.GOARCH))
 			os.Exit(0)
 		}
-		if runtime.GOOS != "linux" {
+		if !strings.Contains(runtime.GOOS, "linux") {
 			run.PrintError("Linux installation only")
 			os.Exit(0)
 		}
