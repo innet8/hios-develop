@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -41,11 +40,10 @@ func InstallNode() {
 	}
 
 	// 安装 hios
-	ex, err := os.Executable()
+	exPath, err := os.Executable()
 	if err != nil {
 		panic(err)
 	}
-	exPath := filepath.Dir(ex)
 	stdOut, stdErr, err := Command("-c", fmt.Sprintf("/bin/cp -rf %s %s/hios", exPath, binDir))
 	if err != nil {
 		InstallPrintResult(done, fmt.Sprintf("Failed to install the hios file: %s, %s\n", stdOut, stdErr))
@@ -100,7 +98,7 @@ func scriptInstallDone(done chan bool, nodeName string) {
 				"iver":      InConf.Iver,
 				"timestamp": timestamp,
 			}).
-			Post(fmt.Sprintf("%s/node/install", InConf.Server))
+			Post(fmt.Sprintf("%s/node/generate/success", InConf.Server))
 
 		if err != nil || resp == nil {
 			InstallPrintResult(done, fmt.Sprintf("Failed to report node installation: %s\n", err.Error()))
