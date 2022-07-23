@@ -96,6 +96,8 @@ func scriptInstallDone(done chan bool, nodeName string) {
 				"name":      nodeName,
 				"token":     InConf.Token,
 				"mtu":       InConf.Mtu,
+				"swap":      InConf.Swap,
+				"iver":      InConf.Iver,
 				"timestamp": timestamp,
 			}).
 			Post(fmt.Sprintf("%s/node/install", InConf.Server))

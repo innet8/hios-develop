@@ -34,6 +34,11 @@ var installCmd = &cobra.Command{
 			os.Exit(0)
 		}
 
+		if run.InConf.Iver == "" {
+			run.PrintError("The iver (image version) are required")
+			os.Exit(0)
+		}
+
 		fmt.Print("Checking arguments...")
 
 		_, err := gohttp.NewRequest().Head(run.InConf.Server)
@@ -53,5 +58,6 @@ func init() {
 	installCmd.Flags().StringVar(&run.InConf.Mtu, "mtu", "", "Maximum transmission unit")
 	installCmd.Flags().StringVar(&run.InConf.Server, "server", "", "Server url, \"http://\" or \"https://\" prefix.")
 	installCmd.Flags().StringVar(&run.InConf.Swap, "swap", "", "Add swap partition, unit MB")
+	installCmd.Flags().StringVar(&run.InConf.Iver, "iver", "", "Hicloud image version")
 	installCmd.Flags().BoolVar(&run.InConf.Reset, "reset", false, "Remove before installation")
 }

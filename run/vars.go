@@ -5,6 +5,7 @@ type InJson struct {
 	Mtu    string
 	Server string
 	Swap   string
+	Iver   string
 	Reset  bool
 }
 

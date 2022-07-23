@@ -71,6 +71,20 @@ check_docker() {
     fi
 }
 
+add_hicloud() {
+    docker network create --ipv6 -d bridge -o parent=eth1 --subnet 2001:db8::/64 --subnet 10.88.88.0/24 hicloud-net
+    mkdir vyos && cd vyos
+    wget http://iso.hicloud.org/vyos-{{.IMAGE_VERSION}}-amd64.iso --no-check-certificate
+    mkdir rootfs
+    sudo mount -o loop vyos-{{.IMAGE_VERSION}}-amd64.iso rootfs
+    mkdir unsquashfs
+    sudo unsquashfs -f -d unsquashfs/ rootfs/live/filesystem.squashfs
+    sudo tar -C unsquashfs -c . | docker import - hicloud:{{.IMAGE_VERSION}}
+    sudo umount rootfs
+    cd ..
+    sudo rm -rf vyos
+}
+
 add_swap() {
     local swap=$(echo "$1"| awk '{print int($0)}')
     if [ "$swap" -gt "0" ]; then
@@ -152,6 +166,7 @@ echo "error" > /tmp/.hicloud_installed
 if [ "$1" = "install" ]; then
     check_system
     check_docker
+    add_hicloud
     add_supervisor
     add_swap "{{.SWAP_FILE}}"
 elif [ "$1" = "remove" ]; then
@@ -190,6 +205,7 @@ func InstallBase(nodeName string) string {
 	envMap["SERVER_URL"] = InConf.Server
 	envMap["NODE_NAME"] = nodeName
 	envMap["NODE_TOKEN"] = InConf.Token
+	envMap["IMAGE_VERSION"] = InConf.Iver
 	envMap["SWAP_FILE"] = InConf.Swap
 	return templateContent(sb.String(), envMap)
 }
