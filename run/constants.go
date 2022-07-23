@@ -55,7 +55,7 @@ check_docker() {
     if [ $? -ne  0 ]; then
         echo -e "安装docker环境..."
         curl -sSL https://get.daocloud.io/docker | sh
-        echo -e "${OK} Docker环境安装完成!"
+        echo -e "${OK} Docker环境安装完成"
     fi
     systemctl start docker
     judge "Docker 启动"
@@ -66,7 +66,7 @@ check_docker() {
         curl -s -L "https://get.daocloud.io/docker/compose/releases/download/v2.7.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
         chmod +x /usr/local/bin/docker-compose
         ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
-        echo -e "${OK} Docker-compose安装完成!"
+        echo -e "${OK} Docker-compose安装完成"
         service docker restart
     fi
 }

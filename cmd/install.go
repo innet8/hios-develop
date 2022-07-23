@@ -5,6 +5,8 @@ import (
 	"github.com/nahid/gohttp"
 	"github.com/spf13/cobra"
 	"os"
+	"runtime"
+	"strings"
 
 	"github.com/innet8/hios/run"
 )
@@ -14,13 +16,21 @@ var installCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install",
 	PreRun: func(cmd *cobra.Command, args []string) {
+		if strings.Contains(runtime.GOARCH, "arm") {
+			run.PrintError(fmt.Sprintf(" %s arch is not supported", runtime.GOARCH))
+			os.Exit(0)
+		}
+		if runtime.GOOS != "linux" {
+			run.PrintError("Linux installation only")
+			os.Exit(0)
+		}
 		if run.InConf.Token == "" {
-			run.PrintError("The token is required!")
+			run.PrintError("The token is required")
 			os.Exit(0)
 		}
 
 		if run.InConf.Server == "" {
-			run.PrintError("The server-url are required!")
+			run.PrintError("The server-url are required")
 			os.Exit(0)
 		}
 

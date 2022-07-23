@@ -111,7 +111,7 @@ func scriptInstallDone(done chan bool, nodeName string) {
 		}
 		done <- true
 		time.Sleep(500 * time.Microsecond)
-		PrintSuccess("Install success!")
+		PrintSuccess("Install success")
 	} else {
 		InstallPrintResult(done, res)
 	}
