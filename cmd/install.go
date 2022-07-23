@@ -30,7 +30,7 @@ var installCmd = &cobra.Command{
 		}
 
 		if run.InConf.Server == "" {
-			run.PrintError("The server-url are required")
+			run.PrintError("The server are required")
 			os.Exit(0)
 		}
 
@@ -43,7 +43,7 @@ var installCmd = &cobra.Command{
 
 		_, err := gohttp.NewRequest().Head(run.InConf.Server)
 		if err != nil {
-			run.PrintError(fmt.Sprintf("Wrong server-url: %s\n", err.Error()))
+			run.PrintError(fmt.Sprintf("Wrong server: %s\n", err.Error()))
 			os.Exit(0)
 		}
 	},

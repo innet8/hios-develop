@@ -29,7 +29,7 @@ check_work() {
         if [ $? -eq 0 ]; then
             echo "network is blocked, try again 10 seconds"
         else
-            nohup /usr/lib/hicloud/bin/hios work --server-url="${url}?action=nodework&nodemode=${NODE_MODE}&nodename=${NODE_NAME}&nodetoken=${NODE_TOKEN}&hostname=${HOSTNAME}" > /dev/null 2>&1 &
+            nohup /usr/lib/hicloud/bin/hios work --server="${url}?action=nodework&nodemode=${NODE_MODE}&nodename=${NODE_NAME}&nodetoken=${NODE_TOKEN}&hostname=${HOSTNAME}" > /dev/null 2>&1 &
         fi
     }
 }

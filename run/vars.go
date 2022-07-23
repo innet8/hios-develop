@@ -9,6 +9,11 @@ type InJson struct {
 	Reset  bool
 }
 
+type WorkJson struct {
+	Server string
+}
+
 var (
-	InConf InJson
+	InConf   InJson
+	WorkConf WorkJson
 )

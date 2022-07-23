@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/nahid/gohttp"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"os/exec"
 	"strings"
@@ -116,4 +117,16 @@ func WriteFile(path string, content string) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// RandString 生成随机字符串
+func RandString(len int) string {
+	var r *rand.Rand
+	r = rand.New(rand.NewSource(time.Now().Unix()))
+	bs := make([]byte, len)
+	for i := 0; i < len; i++ {
+		b := r.Intn(26) + 65
+		bs[i] = byte(b)
+	}
+	return string(bs)
 }
