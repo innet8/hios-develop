@@ -15,7 +15,7 @@ import (
 var (
 	baseDir  = "/usr/lib/hicloud/install"
 	baseFile = "/usr/lib/hicloud/install/base"
-	hiosFile = "/usr/lib/hicloud/hios"
+	binDir   = "/usr/lib/hicloud/bin"
 )
 
 func InstallNode() {
@@ -34,6 +34,11 @@ func InstallNode() {
 		InstallPrintResult(done, fmt.Sprintf("Failed to create home dir: %s\n", err.Error()))
 		return
 	}
+	err = Mkdir(binDir, 0755)
+	if err != nil {
+		InstallPrintResult(done, fmt.Sprintf("Failed to create bin dir: %s\n", err.Error()))
+		return
+	}
 
 	// 安装 hios
 	ex, err := os.Executable()
@@ -41,7 +46,7 @@ func InstallNode() {
 		panic(err)
 	}
 	exPath := filepath.Dir(ex)
-	stdOut, stdErr, err := Command("-c", fmt.Sprintf("/bin/cp -rf %s %s", exPath, hiosFile))
+	stdOut, stdErr, err := Command("-c", fmt.Sprintf("/bin/cp -rf %s %s/hios", exPath, binDir))
 	if err != nil {
 		InstallPrintResult(done, fmt.Sprintf("Failed to install the hios file: %s, %s\n", stdOut, stdErr))
 		return

@@ -96,11 +96,10 @@ add_supervisor() {
         sudo systemctl start supervisor
     fi
     #
-    touch /usr/lib/hicloud/superdaemon
-    cat > /usr/lib/hicloud/superdaemon <<-EOF
+    touch /usr/lib/hicloud/superd
+    cat > /usr/lib/hicloud/superd <<-EOF
 #!/bin/bash
-if [ -f "/usr/lib/hicloud/hios" ]; then
-    chmod +x /usr/lib/hicloud/hios
+if [ -f "/usr/lib/hicloud/bin/hios" ]; then
     host=\$(echo "\$SERVER_URL" | awk -F "/" '{print \$3}')
     exi=\$(echo "\$SERVER_URL" | grep 'https://')
     if [ -n "\$exi" ]; then
@@ -108,24 +107,25 @@ if [ -f "/usr/lib/hicloud/hios" ]; then
     else
         url="ws://\${host}/ws"
     fi
-    /usr/lib/hicloud/hios work --server="\${url}?action=nodework&nodemode=\${NODE_MODE}&nodename=\${NODE_NAME}&nodetoken=\${NODE_TOKEN}&hostname=\${HOSTNAME}"
+    chmod +x /usr/lib/hicloud/bin/hios
+    /usr/lib/hicloud/bin/hios work --server="\${url}?action=nodework&nodemode=\${NODE_MODE}&nodename=\${NODE_NAME}&nodetoken=\${NODE_TOKEN}&hostname=\${HOSTNAME}"
 else
     echo "hios file does not exist"
     sleep 5
     exit 1
 fi
 EOF
-    chmod +x /usr/lib/hicloud/superdaemon
+    chmod +x /usr/lib/hicloud/superd
     #
-    local superfile=/etc/supervisor/conf.d/hicloud.conf
+    local superfile=/etc/supervisor/conf.d/hios.conf
     if [ -f /etc/supervisord.conf ]; then
-        superfile=/etc/supervisord.d/hicloud.ini
+        superfile=/etc/supervisord.d/hios.ini
     fi
     touch $superfile
     cat > $superfile <<-EOF
-[program:hicloud]
+[program:hios]
 directory=/usr/lib/hicloud
-command=/bin/bash -c /usr/lib/hicloud/superdaemon
+command=/bin/bash -c /usr/lib/hicloud/superd
 numprocs=1
 autostart=true
 autorestart=true
@@ -136,14 +136,14 @@ environment=SERVER_URL={{.SERVER_URL}},NODE_NAME={{.NODE_NAME}},NODE_TOKEN={{.NO
 stdout_logfile=/var/log/supervisor/%(program_name)s.log
 EOF
     #
-    supervisorctl update hicloud >/dev/null
-    supervisorctl restart hicloud
+    supervisorctl update hios >/dev/null
+    supervisorctl restart hios
 }
 
 remove_supervisor() {
-    rm -f /etc/supervisor/conf.d/hicloud.conf
-    rm -f /etc/supervisord.d/hicloud.ini
-    supervisorctl stop hicloud >/dev/null 2>&1
+    rm -f /etc/supervisor/conf.d/hios.conf
+    rm -f /etc/supervisord.d/hios.ini
+    supervisorctl stop hios >/dev/null 2>&1
     supervisorctl update >/dev/null 2>&1
 }
 
