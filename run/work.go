@@ -1,16 +1,32 @@
 package run
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"github.com/innet8/hios/pkg/logger"
 	"github.com/togettoyou/wsc"
+	"io/ioutil"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
 var (
+	logDir   = "/usr/lib/hicloud/log"
+	tmpDir   = "/usr/lib/hicloud/tmp"
+	binDir   = "/usr/lib/hicloud/bin"
+	workDir  = "/usr/lib/hicloud/work"
+	startDir = "/usr/lib/hicloud/start"
+
 	connectRand string
-	logDir      = "/usr/lib/hicloud/log"
+	manageState *State
+	netIoInNic  *NetIoNic
+
+	daemonMap = make(map[string]string)
 )
 
 // BuildWork is
@@ -26,6 +42,7 @@ func BuildWork() {
 		os.Exit(1)
 	}
 	_ = logger.SetLogger(`{"File":{"filename":"/usr/lib/hicloud/log/work.log","level":"TRAC","daily":true,"maxlines":100000,"maxsize":10,"maxdays":3,"append":true,"permit":"0660"}}`)
+	StartRun()
 	//
 	done := make(chan bool)
 	ws := wsc.New(WorkConf.Server)
@@ -131,17 +148,295 @@ func onConnected(ws *wsc.Wsc) {
 	}()
 }
 
+// StartRun 启动运行
+func StartRun() {
+	_ = os.RemoveAll(tmpDir)
+	_ = os.MkdirAll(tmpDir, os.ModePerm)
+	//
+	_ = os.MkdirAll(startDir, os.ModePerm)
+	path := fmt.Sprintf(startDir)
+	files, err := filepath.Glob(filepath.Join(path, "*"))
+	if err != nil {
+		logger.Error(err)
+	}
+	for i := range files {
+		file := files[i]
+		content := ReadFile(file)
+		_, _, _ = Command("-c", content)
+	}
+}
+
 // 定时任务A（上报：系统状态、入口网速）
 func timedTaskA(ws *wsc.Wsc) error {
+	nodeMode := os.Getenv("NODE_MODE")
+	sendMessage := ""
+	if nodeMode == "host" {
+		manageState = GetManageState(manageState)
+		if manageState != nil {
+			value, err := json.Marshal(manageState)
+			if err != nil {
+				logger.Error("State manage: %s", err)
+			} else {
+				sendMessage = fmt.Sprintf(`{"type":"node","action":"state","data":"%s"}`, Base64Encode(string(value)))
+			}
+		}
+	} else if nodeMode == "manage" {
+		netIoInNic = GetNetIoInNic(netIoInNic)
+		if netIoInNic != nil {
+			value, err := json.Marshal(netIoInNic)
+			if err != nil {
+				logger.Error("NetIoInNic: %s", err)
+			} else {
+				sendMessage = fmt.Sprintf(`{"type":"node","action":"netio","data":"%s"}`, Base64Encode(string(value)))
+			}
+		}
+	}
+	if sendMessage != "" {
+		return ws.SendTextMessage(sendMessage)
+	}
 	return nil
 }
 
 // 定时任务B（上报：ping结果、流量统计）
 func timedTaskB(ws *wsc.Wsc) error {
+	nodeMode := os.Getenv("NODE_MODE")
+	sendMessage := ""
+	if nodeMode == "host" {
+		// 公网 ping
+		sendErr := pingFileAndSend(ws, fmt.Sprintf("%s/ips", workDir), "")
+		if sendErr != nil {
+			return sendErr
+		}
+	}
+	if InArray(nodeMode, []string{"host", "nginx"}) {
+		// 发送刷新
+		sendMessage = fmt.Sprintf(`{"type":"node","action":"refresh","data":"%d"}`, time.Now().Unix())
+	}
+	if sendMessage != "" {
+		return ws.SendTextMessage(sendMessage)
+	}
 	return nil
+}
+
+// ping 文件并发送
+func pingFileAndSend(ws *wsc.Wsc, fileName string, source string) error {
+	originalSource := source
+	if strings.Contains(source, "_") {
+		source = strings.Split(source, "_")[0]
+	}
+	if !Exists(fileName) {
+		logger.Debug("File no exist [%s]", fileName)
+		return nil
+	}
+	logger.Debug("Start ping [%s]", fileName)
+	result, err := pingFile(fileName, source)
+	if err != nil {
+		logger.Debug("Ping error [%s]: %s", fileName, err)
+		return nil
+	}
+	sendMessage := fmt.Sprintf(`{"type":"node","action":"ping","data":"%s","source":"%s"}`, Base64Encode(result), originalSource)
+	return ws.SendTextMessage(sendMessage)
+}
+
+// ping文件
+func pingFile(path string, source string) (string, error) {
+	result, err := pingFileMap(path, source, 2000, 5)
+	if err != nil {
+		return "", err
+	}
+	value, errJson := json.Marshal(result)
+	return string(value), errJson
+}
+
+// 遍历ping文件内ip，并返回ping键值（最小）
+func pingFileMap(path string, source string, timeout int, count int) (map[string]float64, error) {
+	cmd := fmt.Sprintf("fping -A -u -q -4 -t %d -c %d -f %s", timeout, count, path)
+	if source != "" {
+		cmd = fmt.Sprintf("fping -A -u -q -4 -S %s -t %d -c %d -f %s", source, timeout, count, path)
+	}
+	_, result, err := Command("-c", cmd)
+	if result == "" && err != nil {
+		return nil, err
+	}
+	result = strings.Replace(result, " ", "", -1)
+	spaceRe, errRe := regexp.Compile(`[/:=]`)
+	if errRe != nil {
+		return nil, err
+	}
+	var pingMap = make(map[string]float64)
+	scanner := bufio.NewScanner(strings.NewReader(result))
+	for scanner.Scan() {
+		s := spaceRe.Split(scanner.Text(), -1)
+		if len(s) > 9 {
+			float, _ := strconv.ParseFloat(s[9], 64)
+			pingMap[s[0]] = float
+		} else {
+			pingMap[s[0]] = 0
+		}
+	}
+	return pingMap, nil
 }
 
 // 处理消息
 func handleMessageReceived(ws *wsc.Wsc, message string) {
+	var data map[string]interface{}
+	if ok := json.Unmarshal([]byte(message), &data); ok == nil {
+		content, _ := data["content"].(string)
+		if data["type"] == "nodework:file" {
+			// 保存文件
+			handleMessageFile(content, false)
+		}
+	}
+}
 
+// 保存文件或运行文件
+func handleMessageFile(data string, force bool) {
+	var err error
+	files := strings.Split(data, ",")
+	for _, file := range files {
+		arr := strings.Split(file, ":")
+		if arr[0] == "" {
+			continue
+		}
+		//
+		fileContent := ""
+		fileName := ""
+		if strings.HasPrefix(arr[0], "/") {
+			fileName = arr[0]
+		} else {
+			fileName = fmt.Sprintf("%s/%s", workDir, arr[0])
+		}
+		fileDir := filepath.Dir(fileName)
+		if !Exists(fileDir) {
+			err = os.MkdirAll(fileDir, os.ModePerm)
+			if err != nil {
+				logger.Error("Mkdir error: [%s] %s", fileDir, err)
+				continue
+			}
+		}
+		if len(arr) > 2 {
+			fileContent = Base64Decode(arr[2])
+		} else {
+			fileContent = Base64Decode(arr[1])
+		}
+		if fileContent == "" {
+			logger.Warn("File empty: %s", fileName)
+			continue
+		}
+		//
+		fileKey := StringMd5(fileName)
+		contentKey := StringMd5(fileContent)
+		if !force {
+			md5Value, _ := FileMd5.Load(fileKey)
+			if md5Value != nil && md5Value.(string) == contentKey {
+				logger.Debug("File same: %s", fileName)
+				continue
+			}
+		}
+		FileMd5.Store(fileKey, contentKey)
+		//
+		var stderr string
+		var fileByte = []byte(fileContent)
+		err = ioutil.WriteFile(fileName, fileByte, 0666)
+		if err != nil {
+			logger.Error("WriteFile error: [%s] %s", fileName, err)
+			continue
+		}
+		if arr[1] == "exec" {
+			logger.Info("Exec file start: [%s]", fileName)
+			_, _, _ = Command("-c", fmt.Sprintf("chmod +x %s", fileName))
+			_, stderr, err = Command(fileName)
+			if err != nil {
+				logger.Error("Exec file error: [%s] %s %s", fileName, err, stderr)
+				continue
+			} else {
+				logger.Info("Exec file success: [%s]", fileName)
+			}
+		} else if arr[1] == "yml" {
+			logger.Info("Run yml start: [%s]", fileName)
+			cmd := fmt.Sprintf("cd %s && docker-compose up -d --remove-orphans", fileDir)
+			_, stderr, err = Command("-c", cmd)
+			if err != nil {
+				logger.Error("Run yml error: [%s] %s %s", fileName, err, stderr)
+				continue
+			} else {
+				logger.Info("Run yml success: [%s]", fileName)
+			}
+		} else if arr[1] == "nginx" {
+			logger.Info("Run nginx start: [%s]", fileName)
+			_, stderr, err = Command("-c", "nginx -s reload")
+			if err != nil {
+				logger.Error("Run nginx error: [%s] %s %s", fileName, err, stderr)
+				continue
+			} else {
+				logger.Info("Run nginx success: [%s]", fileName)
+			}
+		} else if arr[1] == "danted" {
+			program := fmt.Sprintf("danted -f %s", fileName)
+			killPsef(program)
+			time.Sleep(1 * time.Second)
+			logger.Info("Run danted start: [%s]", fileName)
+			cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", program)
+			_, stderr, err = Command("-c", cmd)
+			if err != nil {
+				logger.Error("Run danted error: [%s] %s %s", fileName, err, stderr)
+				continue
+			} else {
+				logger.Info("Run danted success: [%s]", fileName)
+				daemonStart(program, file)
+			}
+		} else if arr[1] == "xray" {
+			program := fmt.Sprintf("%s/xray run -c %s", binDir, fileName)
+			killPsef(program)
+			time.Sleep(1 * time.Second)
+			logger.Info("Run xray start: [%s]", fileName)
+			cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", program)
+			_, stderr, err = Command("-c", cmd)
+			if err != nil {
+				logger.Error("Run xray error: [%s] %s %s", fileName, err, stderr)
+				continue
+			} else {
+				logger.Info("Run xray success: [%s]", fileName)
+				daemonStart(program, file)
+			}
+		}
+	}
+}
+
+// 杀死根据 ps -ef 查出来的
+func killPsef(value string) {
+	cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep' | awk '{print $2}'", value)
+	result, _, _ := Command("-c", cmd)
+	if len(result) > 0 {
+		sc := bufio.NewScanner(strings.NewReader(result))
+		for sc.Scan() {
+			if len(sc.Text()) > 0 {
+				_, _, _ = Command("-c", fmt.Sprintf("kill -9 %s", sc.Text()))
+			}
+		}
+	}
+}
+
+// 守护进程
+func daemonStart(value string, file string) {
+	// 每10秒检测一次
+	rand := RandString(6)
+	daemonMap[value] = rand
+	go func() {
+		t := time.NewTicker(10 * time.Second)
+		for {
+			select {
+			case <-t.C:
+				if daemonMap[value] != rand {
+					return
+				}
+				cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep'", value)
+				result, _, _ := Command("-c", cmd)
+				if len(result) == 0 {
+					handleMessageFile(file, true)
+					return
+				}
+			}
+		}
+	}()
 }
