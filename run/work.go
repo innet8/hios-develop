@@ -285,6 +285,19 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 		if data["type"] == "nodework:file" {
 			// 保存文件
 			handleMessageFile(content, false)
+		} else if data["type"] == "nodework:cmd" {
+			// 执行命令
+			stdout, stderr, err := handleMessageCmd(content, data["log"] != "no")
+			if data["callback"] != nil {
+				cmderr := ""
+				if err != nil {
+					cmderr = err.Error()
+				}
+				err = ws.SendTextMessage(fmt.Sprintf(`{"type":"node","action":"cmd","callback":"%s","data":{"stdout":"%s","stderr":"%s","err":"%s"}}`, data["callback"], Base64Encode(stdout), Base64Encode(stderr), Base64Encode(cmderr)))
+				if err != nil {
+					logger.Debug("Send cmd callback error: %s", err)
+				}
+			}
 		}
 	}
 }
@@ -401,6 +414,19 @@ func handleMessageFile(data string, force bool) {
 			}
 		}
 	}
+}
+
+// 运行自定义脚本
+func handleMessageCmd(cmd string, addLog bool) (string, string, error) {
+	stdout, stderr, err := Command("-c", cmd)
+	if addLog {
+		if err != nil {
+			logger.Error("Run cmd error: [%s] %s; stdout: [%s]; stderr: [%s]", cmd, err, stdout, stderr)
+		} else {
+			logger.Info("Run cmd success: [%s]", cmd)
+		}
+	}
+	return stdout, stderr, err
 }
 
 // 杀死根据 ps -ef 查出来的
