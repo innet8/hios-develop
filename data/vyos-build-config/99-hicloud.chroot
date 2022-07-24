@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ "$NODE_MODE" = "manage" ]; then
+if [ "$NODE_MODE" = "hihub" ]; then
     chmod +x /usr/lib/hicloud/entrypoint.sh
     nohup /usr/lib/hicloud/entrypoint.sh > /dev/null 2>&1 &
 fi

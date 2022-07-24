@@ -23,7 +23,7 @@ var (
 	startDir = "/usr/lib/hicloud/start"
 
 	connectRand string
-	manageState *State
+	hostState   *State
 	netIoInNic  *NetIoNic
 
 	daemonMap = make(map[string]string)
@@ -171,16 +171,16 @@ func timedTaskA(ws *wsc.Wsc) error {
 	nodeMode := os.Getenv("NODE_MODE")
 	sendMessage := ""
 	if nodeMode == "host" {
-		manageState = GetManageState(manageState)
-		if manageState != nil {
-			value, err := json.Marshal(manageState)
+		hostState = GetHostState(hostState)
+		if hostState != nil {
+			value, err := json.Marshal(hostState)
 			if err != nil {
-				logger.Error("State manage: %s", err)
+				logger.Error("State host: %s", err)
 			} else {
 				sendMessage = fmt.Sprintf(`{"type":"node","action":"state","data":"%s"}`, Base64Encode(string(value)))
 			}
 		}
-	} else if nodeMode == "manage" {
+	} else if nodeMode == "hihub" {
 		netIoInNic = GetNetIoInNic(netIoInNic)
 		if netIoInNic != nil {
 			value, err := json.Marshal(netIoInNic)
@@ -207,8 +207,7 @@ func timedTaskB(ws *wsc.Wsc) error {
 		if sendErr != nil {
 			return sendErr
 		}
-	}
-	if InArray(nodeMode, []string{"host", "nginx"}) {
+	} else {
 		// 发送刷新
 		sendMessage = fmt.Sprintf(`{"type":"node","action":"refresh","data":"%d"}`, time.Now().Unix())
 	}

@@ -175,8 +175,8 @@ func Base64Decode(data string) string {
 	return string(uDec)
 }
 
-// GetManageState 获取主容器的状态
-func GetManageState(lastState *State) *State {
+// GetHostState 获取节点资源状态
+func GetHostState(lastState *State) *State {
 	now := time.Now()
 	state := &State{
 		T: now,
