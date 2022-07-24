@@ -29,8 +29,20 @@ var (
 	daemonMap = make(map[string]string)
 )
 
-// BuildWork is
-func BuildWork() {
+// WorkServer 通过文件获取Work服务器
+func WorkServer() string {
+	serverFile := fmt.Sprintf("%s/.hios-server", binDir)
+	if Exists(serverFile) {
+		content := ReadFile(serverFile)
+		if strings.HasPrefix(content, "ws://") || strings.HasPrefix(content, "wss://") {
+			return content
+		}
+	}
+	return ""
+}
+
+// WorkStart Work开始
+func WorkStart() {
 	nodeMode := os.Getenv("NODE_MODE")
 	if nodeMode == "" {
 		logger.Error("System env is error")
@@ -42,7 +54,7 @@ func BuildWork() {
 		os.Exit(1)
 	}
 	_ = logger.SetLogger(`{"File":{"filename":"/usr/lib/hicloud/log/work.log","level":"TRAC","daily":true,"maxlines":100000,"maxsize":10,"maxdays":3,"append":true,"permit":"0660"}}`)
-	StartRun()
+	startRun()
 	//
 	done := make(chan bool)
 	ws := wsc.New(WorkConf.Server)
@@ -148,8 +160,8 @@ func onConnected(ws *wsc.Wsc) {
 	}()
 }
 
-// StartRun 启动运行
-func StartRun() {
+// 启动运行
+func startRun() {
 	_ = os.RemoveAll(tmpDir)
 	_ = os.MkdirAll(tmpDir, os.ModePerm)
 	//
