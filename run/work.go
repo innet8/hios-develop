@@ -33,7 +33,7 @@ var (
 func WorkServer() string {
 	serverFile := fmt.Sprintf("%s/.work-server", binDir)
 	if Exists(serverFile) {
-		content := ReadFile(serverFile)
+		content := strings.TrimSpace(ReadFile(serverFile))
 		if strings.HasPrefix(content, "ws://") || strings.HasPrefix(content, "wss://") {
 			return content
 		}
