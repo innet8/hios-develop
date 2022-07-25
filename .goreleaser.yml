@@ -26,4 +26,13 @@ archives:
         format: zip
 
 changelog:
-  skip: true
+  groups:
+    - title: 'Features'
+      regexp: "^.*feat[(\\w)]*[:：]+.*$"
+      order: 0
+    - title: 'Bug fixes'
+      regexp: "^.*fix[(\\w)]*[:：]+.*$"
+      order: 1
+    - title: 'Perfect'
+      regexp: "^.*pref[(\\w)]*[:：]+.*$"
+      order: 2
