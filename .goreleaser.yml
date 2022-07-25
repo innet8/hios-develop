@@ -24,3 +24,6 @@ archives:
     format_overrides:
       - goos: windows
         format: zip
+
+changelog:
+  skip: true
