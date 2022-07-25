@@ -1,5 +1,7 @@
 #!/bin/bash
 
+binDir="/usr/lib/hicloud/bin"
+
 _wsurl() {
     local host=$(echo "$SERVER_URL" | awk -F "/" '{print $3}')
     local exi=$(echo "$SERVER_URL" | grep 'https://')
@@ -23,24 +25,24 @@ _network() {
 
 check_work() {
     local url=`_wsurl`
-    local exist=`ps -ef | grep '/usr/lib/hicloud/bin/hios work' | grep -v 'grep'`
+    local exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
     [ -n "$url" ] && [ -z "$exist" ] && {
         _network
         if [ $? -eq 0 ]; then
             echo "network is blocked, try again 10 seconds"
         else
-            echo "${url}?action=nodework&nodemode=${NODE_MODE}&nodename=${NODE_NAME}&nodetoken=${NODE_TOKEN}&hostname=${HOSTNAME}" > /usr/lib/hicloud/bin/.hios-server
-            nohup /usr/lib/hicloud/bin/hios work > /dev/null 2>&1 &
+            echo "${url}?action=nodework&nodemode=${NODE_MODE}&nodename=${NODE_NAME}&nodetoken=${NODE_TOKEN}&hostname=${HOSTNAME}" > ${binDir}/.work-server
+            nohup ${binDir}/hios work > /dev/null 2>&1 &
         fi
     }
 }
 
-if [ -f /usr/lib/hicloud/bin/xray ]; then
-    chmod +x /usr/lib/hicloud/bin/xray
+if [ -f ${binDir}/hios ]; then
+    chmod +x ${binDir}/hios
 fi
 
-if [ -f /usr/lib/hicloud/bin/hios ]; then
-    chmod +x /usr/lib/hicloud/bin/hios
+if [ -f ${binDir}/xray ]; then
+    chmod +x ${binDir}/xray
 fi
 
 while true; do
