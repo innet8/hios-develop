@@ -31,7 +31,7 @@ var (
 
 // WorkServer 通过文件获取Work服务器
 func WorkServer() string {
-	serverFile := fmt.Sprintf("%s/.work-server", binDir)
+	serverFile := fmt.Sprintf("%s/.hios-work-server", binDir)
 	if Exists(serverFile) {
 		content := strings.TrimSpace(ReadFile(serverFile))
 		if strings.HasPrefix(content, "ws://") || strings.HasPrefix(content, "wss://") {

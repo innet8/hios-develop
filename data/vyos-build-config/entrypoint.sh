@@ -1,6 +1,5 @@
 #!/bin/bash
 
-cmdPath="$0"
 binDir="/usr/lib/hicloud/bin"
 
 get_wsurl() {
@@ -32,7 +31,7 @@ check_work() {
         if [ $? -eq 0 ]; then
             echo "network is blocked, try again 10 seconds"
         else
-            echo "${url}?action=nodework&nodemode=${NODE_MODE}&nodename=${NODE_NAME}&nodetoken=${NODE_TOKEN}&hostname=${HOSTNAME}" > ${binDir}/.work-server
+            echo "${url}?action=nodework&nodemode=${NODE_MODE}&nodename=${NODE_NAME}&nodetoken=${NODE_TOKEN}&hostname=${HOSTNAME}" > ${binDir}/.hios-work-server
             nohup ${binDir}/hios work > /dev/null 2>&1 &
         fi
     }
@@ -42,20 +41,31 @@ start_work() {
     if [ -f ${binDir}/hios ]; then
         chmod +x ${binDir}/hios
     fi
-    
+
     if [ -f ${binDir}/xray ]; then
         chmod +x ${binDir}/xray
     fi
-    
+
     while true; do
         sleep 10
         check_work > /dev/null 2>&1 &
     done
 }
 
-existNum=`ps -ef | grep "${cmdPath}" | grep -v "grep" | wc -l`
-if [[ "$existNum" -lt 2 ]]; then
-    start_work
-else
-    echo "Process exists"
+
+RUNDIR=$(cd `dirname $0`; pwd)
+PIDFILE="${RUNDIR}/.entrypoint.pid"
+
+if [ -s ${PIDFILE} ]; then
+   SPID=`cat ${PIDFILE}`
+   if [ -e /proc/${SPID}/status ]; then
+      echo "The script is already running."
+      exit 1
+  fi
+  cat /dev/null > ${PIDFILE}
 fi
+echo $$ > ${PIDFILE}
+
+start_work
+
+cat /dev/null > ${PIDFILE}
