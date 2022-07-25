@@ -3,4 +3,6 @@
 if [ "$NODE_MODE" = "hihub" ]; then
     chmod +x /usr/lib/hicloud/entrypoint.sh
     nohup /usr/lib/hicloud/entrypoint.sh > /dev/null 2>&1 &
+else
+    echo $(env) > /tmp/.HI_ALL_ENV
 fi
