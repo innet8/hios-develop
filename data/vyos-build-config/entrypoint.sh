@@ -1,8 +1,9 @@
 #!/bin/bash
 
+cmdPath="$0"
 binDir="/usr/lib/hicloud/bin"
 
-_wsurl() {
+get_wsurl() {
     local host=$(echo "$SERVER_URL" | awk -F "/" '{print $3}')
     local exi=$(echo "$SERVER_URL" | grep 'https://')
     if [ -n "$exi" ]; then
@@ -12,7 +13,7 @@ _wsurl() {
     fi
 }
 
-_network() {
+check_network() {
     local target=$SERVER_URL
     local ret_code=`curl -I -s --connect-timeout 1 -m 5 ${target} -w %{http_code} | tail -n1`
     if [ "x$ret_code" = "x200" ] || [ "x$ret_code" = "x301" ] || [ "x$ret_code" = "x302" ]; then
@@ -24,10 +25,10 @@ _network() {
 }
 
 check_work() {
-    local url=`_wsurl`
+    local url=`get_wsurl`
     local exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
     [ -n "$url" ] && [ -z "$exist" ] && {
-        _network
+        check_network
         if [ $? -eq 0 ]; then
             echo "network is blocked, try again 10 seconds"
         else
@@ -37,15 +38,24 @@ check_work() {
     }
 }
 
-if [ -f ${binDir}/hios ]; then
-    chmod +x ${binDir}/hios
-fi
+start_work() {
+    if [ -f ${binDir}/hios ]; then
+        chmod +x ${binDir}/hios
+    fi
+    
+    if [ -f ${binDir}/xray ]; then
+        chmod +x ${binDir}/xray
+    fi
+    
+    while true; do
+        sleep 10
+        check_work > /dev/null 2>&1 &
+    done
+}
 
-if [ -f ${binDir}/xray ]; then
-    chmod +x ${binDir}/xray
+existCmd=`ps -ef | grep "${cmdPath}" | grep -v "grep"`
+if [ -z "$existCmd" ]; then
+    start_work
+else
+    echo "Process exists"
 fi
-
-while true; do
-    sleep 10
-    check_work > /dev/null 2>&1 &
-done
