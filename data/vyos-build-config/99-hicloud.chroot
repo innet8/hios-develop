@@ -1,8 +1,14 @@
 #!/bin/bash
 
-if [ "$NODE_MODE" = "hihub" ]; then
+cat > /etc/profile.d/hicloud.sh <<-EOF
+#!/bin/sh
+
+echo "\$(date +%s)" > /tmp/.histart
+
+if [ "\$NODE_MODE" = "hihub" ]; then
     chmod +x /usr/lib/hicloud/entrypoint.sh
     nohup /usr/lib/hicloud/entrypoint.sh > /dev/null 2>&1 &
-else
-    echo $(env) > /tmp/.HI_ALL_ENV
 fi
+EOF
+
+chmod +x /etc/profile.d/hicloud.sh
