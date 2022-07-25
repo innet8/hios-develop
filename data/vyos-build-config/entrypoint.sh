@@ -53,8 +53,8 @@ start_work() {
     done
 }
 
-existCmd=`ps -ef | grep "${cmdPath}" | grep -v "grep"`
-if [ -z "$existCmd" ]; then
+existNum=`ps -ef | grep "${cmdPath}" | grep -v "grep" | wc -l`
+if [[ "$existNum" -lt 2 ]]; then
     start_work
 else
     echo "Process exists"
