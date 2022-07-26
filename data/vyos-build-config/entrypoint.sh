@@ -37,7 +37,22 @@ check_work() {
     }
 }
 
-start_work() {
+init_network() {
+    local lan_name=$(ifconfig -a | grep 'BROADCAST' | grep '^[a-z]' | awk -F: '{print $1}')
+    if [ -n "$lan_name" ]; then
+        expect <<EOF
+set timeout 30
+spawn su vyos
+expect "$" { send "configure\n" }
+expect "#" { send "set interfaces ethernet ${lan_name} ipv6 address no-default-link-local\n" }
+expect "#" { send "set system name-server 8.8.8.8\n" }
+expect "#" { send "commit\n" }
+expect "#" { send "exit\n" } expect eof
+EOF
+    fi
+}
+
+init_work() {
     if [ -f ${binDir}/hios ]; then
         chmod +x ${binDir}/hios
     fi
@@ -66,6 +81,7 @@ if [ -s ${PIDFILE} ]; then
 fi
 echo $$ > ${PIDFILE}
 
-start_work
+init_network
+init_work
 
 cat /dev/null > ${PIDFILE}
