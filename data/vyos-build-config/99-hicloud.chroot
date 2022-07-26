@@ -13,7 +13,5 @@ if [ "\$NODE_MODE" = "hihub" ]; then
     chmod +x /usr/lib/hicloud/entrypoint.sh
     nohup /usr/lib/hicloud/entrypoint.sh > /dev/null 2>&1 &
 fi
-
-/sbin/init
 EOF
 chmod +x /usr/sbin/hicloud
