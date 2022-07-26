@@ -219,6 +219,18 @@ func timedTaskB(ws *wsc.Wsc) error {
 		if sendErr != nil {
 			return sendErr
 		}
+		// 专线 ping
+		dirPath := fmt.Sprintf("%s/vpc_ip", workDir)
+		if IsDir(dirPath) {
+			files := getIpsFiles(dirPath)
+			if files != nil {
+				for _, file := range files {
+					go func(file string) {
+						_ = pingFileAndSend(ws, fmt.Sprintf("%s/%s.ips", dirPath, file), file)
+					}(file)
+				}
+			}
+		}
 	} else {
 		// 发送刷新
 		sendMessage = fmt.Sprintf(`{"type":"node","action":"refresh","data":"%d"}`, time.Now().Unix())
@@ -227,6 +239,32 @@ func timedTaskB(ws *wsc.Wsc) error {
 		return ws.SendTextMessage(sendMessage)
 	}
 	return nil
+}
+
+// 获取目录下的所有ips文件
+func getIpsFiles(dirPath string) []string {
+	dir, err := ioutil.ReadDir(dirPath)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, fi := range dir {
+		if !fi.IsDir() {
+			ok := strings.HasSuffix(fi.Name(), ".ips")
+			if ok {
+				basename := strings.TrimSuffix(fi.Name(), ".ips")
+				if StringToIP(basename) != nil { // xxx.xxx.xxx.xxx.ips
+					files = append(files, basename)
+				} else if strings.Contains(basename, "_") { // xxx.xxx.xxx.xxx(_xx)+.ips
+					ip := strings.Split(basename, "_")[0]
+					if StringToIP(ip) != nil {
+						files = append(files, basename)
+					}
+				}
+			}
+		}
+	}
+	return files
 }
 
 // ping 文件并发送

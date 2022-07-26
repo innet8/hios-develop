@@ -17,6 +17,7 @@ import (
 	gopsnet "github.com/shirou/gopsutil/net"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -31,22 +32,8 @@ func PrintSuccess(msg string) {
 	fmt.Printf("\033[1;32m" + msg + " \033[0m\n")
 }
 
-func DisplayRunning(display string, done chan bool) {
-	chars := []string{
-		"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
-	}
-	d := time.NewTicker(100 * time.Millisecond)
-	for {
-		select {
-		case <-done:
-			fmt.Print("\r")
-			return
-		case _ = <-d.C:
-			s1 := chars[:1]
-			chars = append(chars[1:], s1[0])
-			fmt.Printf("\r %s %s ...", s1[0], display)
-		}
-	}
+func StringToIP(i string) net.IP {
+	return net.ParseIP(i).To4()
 }
 
 // Mkdir 创建目录
