@@ -4,14 +4,15 @@
 echo 'Defaults env_keep += "SERVER_URL NODE_MODE NODE_NAME NODE_TOKEN"' >> /etc/sudoers
 
 # 添加开机启动
-cat > /etc/profile.d/hicloud.sh <<-EOF
+cat > /etc/init.d/hicloud.sh <<-EOF
 #!/bin/sh
 
-echo "\$(date +%s)" > /tmp/.histart
+echo "date=\$(date +%s), NODE_MODE=\$NODE_MODE, SERVER_URL=\$SERVER_URL" > /tmp/.histart
 
 if [ "\$NODE_MODE" = "hihub" ]; then
     chmod +x /usr/lib/hicloud/entrypoint.sh
     nohup /usr/lib/hicloud/entrypoint.sh > /dev/null 2>&1 &
 fi
 EOF
-chmod +x /etc/profile.d/hicloud.sh
+chmod +x /etc/init.d/hicloud.sh
+update-rc.d hicloud.sh defaults
