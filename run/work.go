@@ -213,7 +213,7 @@ func timedTaskA(ws *wsc.Wsc) error {
 func timedTaskB(ws *wsc.Wsc) error {
 	nodeMode := os.Getenv("NODE_MODE")
 	sendMessage := ""
-	if nodeMode == "host" {
+	if nodeMode == "hihub" {
 		// 公网 ping
 		sendErr := pingFileAndSend(ws, fmt.Sprintf("%s/ips", workDir), "")
 		if sendErr != nil {
@@ -231,6 +231,7 @@ func timedTaskB(ws *wsc.Wsc) error {
 				}
 			}
 		}
+		// todo wg 流量统计
 	} else {
 		// 发送刷新
 		sendMessage = fmt.Sprintf(`{"type":"node","action":"refresh","data":"%d"}`, time.Now().Unix())
