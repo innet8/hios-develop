@@ -492,7 +492,7 @@ func updateConfigure(fileName string) {
 	//
 	go func() {
 		logger.Info("Run configure start: [%s]", fileName)
-		cmd := fmt.Sprintf("%s/configure %s", binDir, fileName)
+		cmd := fmt.Sprintf("%s/configure.sh %s", binDir, fileName)
 		_, stderr, err := Command("-c", cmd)
 		if err != nil {
 			logger.Error("Run configure error: [%s] %s %s", fileName, err, stderr)
