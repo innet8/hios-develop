@@ -23,8 +23,12 @@ var (
 	startDir = "/usr/lib/hicloud/start"
 
 	connectRand string
-	hostState   *State
-	netIoInNic  *NetIoNic
+
+	configUpdating bool
+	configContinue string
+
+	hostState  *State
+	netIoInNic *NetIoNic
 
 	daemonMap = make(map[string]string)
 )
@@ -411,7 +415,6 @@ func handleMessageFile(data string, force bool) {
 			_, stderr, err = Command(fileName)
 			if err != nil {
 				logger.Error("Exec file error: [%s] %s %s", fileName, err, stderr)
-				continue
 			} else {
 				logger.Info("Exec file success: [%s]", fileName)
 			}
@@ -421,7 +424,6 @@ func handleMessageFile(data string, force bool) {
 			_, stderr, err = Command("-c", cmd)
 			if err != nil {
 				logger.Error("Run yml error: [%s] %s %s", fileName, err, stderr)
-				continue
 			} else {
 				logger.Info("Run yml success: [%s]", fileName)
 			}
@@ -430,7 +432,6 @@ func handleMessageFile(data string, force bool) {
 			_, stderr, err = Command("-c", "nginx -s reload")
 			if err != nil {
 				logger.Error("Run nginx error: [%s] %s %s", fileName, err, stderr)
-				continue
 			} else {
 				logger.Info("Run nginx success: [%s]", fileName)
 			}
@@ -443,7 +444,6 @@ func handleMessageFile(data string, force bool) {
 			_, stderr, err = Command("-c", cmd)
 			if err != nil {
 				logger.Error("Run danted error: [%s] %s %s", fileName, err, stderr)
-				continue
 			} else {
 				logger.Info("Run danted success: [%s]", fileName)
 				daemonStart(program, file)
@@ -457,11 +457,12 @@ func handleMessageFile(data string, force bool) {
 			_, stderr, err = Command("-c", cmd)
 			if err != nil {
 				logger.Error("Run xray error: [%s] %s %s", fileName, err, stderr)
-				continue
 			} else {
 				logger.Info("Run xray success: [%s]", fileName)
 				daemonStart(program, file)
 			}
+		} else if arr[1] == "configure" {
+			updateConfigure(fileName)
 		}
 	}
 }
@@ -477,6 +478,34 @@ func handleMessageCmd(cmd string, addLog bool) (string, string, error) {
 		}
 	}
 	return stdout, stderr, err
+}
+
+// 更新configure
+func updateConfigure(fileName string) {
+	if configUpdating {
+		logger.Info("Run configure wait: [%s]", fileName)
+		configContinue = fileName
+		return
+	}
+	configContinue = ""
+	configUpdating = true
+	//
+	go func() {
+		logger.Info("Run configure start: [%s]", fileName)
+		cmd := fmt.Sprintf("%s/configure %s", binDir, fileName)
+		_, stderr, err := Command("-c", cmd)
+		if err != nil {
+			logger.Error("Run configure error: [%s] %s %s", fileName, err, stderr)
+		} else {
+			logger.Info("Run configure success: [%s]", fileName)
+		}
+		configUpdating = false
+		//
+		if len(configContinue) > 0 {
+			logger.Info("Run configure continue: [%s]", configContinue)
+			updateConfigure(configContinue)
+		}
+	}()
 }
 
 // 杀死根据 ps -ef 查出来的
