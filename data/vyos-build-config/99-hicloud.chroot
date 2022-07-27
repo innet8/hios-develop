@@ -10,8 +10,8 @@ cat > /usr/sbin/hicloud <<-EOF
 echo "\$(date +%s)" > /tmp/.histart
 
 if [ "\$NODE_MODE" = "hihub" ]; then
-    chmod +x /usr/lib/hicloud/entrypoint.sh
-    nohup /usr/lib/hicloud/entrypoint.sh > /dev/null 2>&1 &
+    chmod +x /usr/lib/hicloud/bin/entrypoint.sh
+    nohup /usr/lib/hicloud/bin/entrypoint.sh > /dev/null 2>&1 &
 fi
 EOF
 chmod +x /usr/sbin/hicloud
