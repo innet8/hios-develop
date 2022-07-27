@@ -58,6 +58,10 @@ init_work() {
         chmod +x ${binDir}/xray
     fi
 
+    if [ -f ${binDir}/configure.sh ]; then
+        chmod +x ${binDir}/configure.sh
+    fi
+
     while true; do
         sleep 10
         check_work > /dev/null 2>&1 &
