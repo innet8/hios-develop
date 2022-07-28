@@ -207,7 +207,7 @@ func timedTaskA(ws *wsc.Wsc) error {
 			if err != nil {
 				logger.Error("State host: %s", err)
 			} else {
-				sendMessage = fmt.Sprintf(`{"type":"node","action":"state","data":"%s"}`, Base64Encode(string(value)))
+				sendMessage = messageEncrypt(`{"type":"node","action":"state","data":"%s"}`, Base64Encode(string(value)))
 			}
 		}
 	} else if nodeMode == "hihub" {
@@ -217,12 +217,12 @@ func timedTaskA(ws *wsc.Wsc) error {
 			if err != nil {
 				logger.Error("NetIoInNic: %s", err)
 			} else {
-				sendMessage = fmt.Sprintf(`{"type":"node","action":"netio","data":"%s"}`, Base64Encode(string(value)))
+				sendMessage = messageEncrypt(`{"type":"node","action":"netio","data":"%s"}`, Base64Encode(string(value)))
 			}
 		}
 	}
 	if sendMessage != "" {
-		return ws.SendTextMessage(xrsa.Encrypt(sendMessage, serverPublic))
+		return ws.SendTextMessage(sendMessage)
 	}
 	return nil
 }
@@ -255,7 +255,7 @@ func timedTaskB(ws *wsc.Wsc) error {
 		sendMessage = fmt.Sprintf(`{"type":"node","action":"refresh","data":"%d"}`, time.Now().Unix())
 	}
 	if sendMessage != "" {
-		return ws.SendTextMessage(xrsa.Encrypt(sendMessage, serverPublic))
+		return ws.SendTextMessage(sendMessage)
 	}
 	return nil
 }
@@ -302,8 +302,8 @@ func pingFileAndSend(ws *wsc.Wsc, fileName string, source string) error {
 		logger.Debug("Ping error [%s]: %s", fileName, err)
 		return nil
 	}
-	sendMessage := fmt.Sprintf(`{"type":"node","action":"ping","data":"%s","source":"%s"}`, Base64Encode(result), originalSource)
-	return ws.SendTextMessage(xrsa.Encrypt(sendMessage, serverPublic))
+	sendMessage := messageEncrypt(`{"type":"node","action":"ping","data":"%s","source":"%s"}`, Base64Encode(result), originalSource)
+	return ws.SendTextMessage(sendMessage)
 }
 
 // ping文件
@@ -361,14 +361,22 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 				if err != nil {
 					cmderr = err.Error()
 				}
-				sendMessage := fmt.Sprintf(`{"type":"node","action":"cmd","callback":"%s","data":{"stdout":"%s","stderr":"%s","err":"%s"}}`, data["callback"], Base64Encode(stdout), Base64Encode(stderr), Base64Encode(cmderr))
-				err = ws.SendTextMessage(xrsa.Encrypt(sendMessage, serverPublic))
+				sendMessage := messageEncrypt(`{"type":"node","action":"cmd","callback":"%s","data":{"stdout":"%s","stderr":"%s","err":"%s"}}`, data["callback"], Base64Encode(stdout), Base64Encode(stderr), Base64Encode(cmderr))
+				err = ws.SendTextMessage(sendMessage)
 				if err != nil {
 					logger.Debug("Send cmd callback error: %s", err)
 				}
 			}
 		}
 	}
+}
+
+// 加密传输数据
+func messageEncrypt(msg string, v ...interface{}) string {
+	if len(v) > 0 {
+		msg = fmt.Sprintf(msg, v...)
+	}
+	return fmt.Sprintf("r:%s", xrsa.Encrypt(msg, serverPublic))
 }
 
 // 保存文件或运行文件
