@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-type WorkJson struct {
-	Server string
+type RsaJson struct {
+	Path string
 }
 
 type State struct {
@@ -47,6 +47,6 @@ type NetIoNic struct {
 }
 
 var (
-	WorkConf WorkJson
-	FileMd5  sync.Map
+	RsaConf RsaJson
+	FileMd5 sync.Map
 )

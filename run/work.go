@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/innet8/hios/pkg/logger"
+	"github.com/innet8/hios/pkg/xrsa"
 	"github.com/togettoyou/wsc"
 	"io/ioutil"
 	"os"
@@ -19,8 +20,13 @@ var (
 	logDir   = "/usr/lib/hicloud/log"
 	tmpDir   = "/usr/lib/hicloud/tmp"
 	binDir   = "/usr/lib/hicloud/bin"
+	sshDir   = "/usr/lib/hicloud/.ssh"
 	workDir  = "/usr/lib/hicloud/work"
 	startDir = "/usr/lib/hicloud/start"
+
+	serverPublic string
+	nodePublic   string
+	nodePrivate  string
 
 	connectRand string
 
@@ -33,25 +39,31 @@ var (
 	daemonMap = make(map[string]string)
 )
 
-// WorkServer 通过文件获取Work服务器
-func WorkServer() string {
-	serverFile := fmt.Sprintf("%s/.hios-work-server", binDir)
-	if Exists(serverFile) {
-		content := strings.TrimSpace(ReadFile(serverFile))
-		if strings.HasPrefix(content, "ws://") || strings.HasPrefix(content, "wss://") {
-			return content
-		}
-	}
-	return ""
-}
-
 // WorkStart Work开始
 func WorkStart() {
-	nodeMode := os.Getenv("NODE_MODE")
-	if nodeMode == "" {
-		logger.Error("System env is error")
+	if !Exists(fmt.Sprintf("%s/server_public", sshDir)) {
+		logger.Error("Server public key does not exist")
 		os.Exit(1)
 	}
+	if !Exists(fmt.Sprintf("%s/node_public", sshDir)) {
+		logger.Error("Node public key does not exist")
+		os.Exit(1)
+	}
+	if !Exists(fmt.Sprintf("%s/node_private", sshDir)) {
+		logger.Error("Node private key does not exist")
+		os.Exit(1)
+	}
+	serverPublic = ReadFile(fmt.Sprintf("%s/server_public", sshDir))
+	nodePublic = ReadFile(fmt.Sprintf("%s/node_public", sshDir))
+	nodePrivate = ReadFile(fmt.Sprintf("%s/node_private", sshDir))
+	//
+	protocol := "ws://"
+	if strings.HasPrefix(os.Getenv("SERVER_URL"), "https://") {
+		protocol = "wss://"
+	}
+	nodeName, _, _ := Command("-c", "hostname")
+	serverUrl := fmt.Sprintf("%s?action=nodework&nodemode=%s&nodetoken=%s&nodename=%s", protocol, os.Getenv("NODE_MODE"), os.Getenv("NODE_TOKEN"), nodeName)
+	//
 	err := Mkdir(logDir, 0755)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to create log dir: %s\n", err.Error()))
@@ -61,7 +73,7 @@ func WorkStart() {
 	startRun()
 	//
 	done := make(chan bool)
-	ws := wsc.New(WorkConf.Server)
+	ws := wsc.New(serverUrl)
 	// 自定义配置
 	ws.SetConfig(&wsc.Config{
 		WriteWait:         10 * time.Second,
@@ -104,7 +116,7 @@ func WorkStart() {
 	})
 	ws.OnTextMessageReceived(func(message string) {
 		logger.Debug("OnTextMessageReceived: ", message)
-		handleMessageReceived(ws, message)
+		handleMessageReceived(ws, xrsa.Decrypt(message, nodePublic, nodePrivate))
 	})
 	ws.OnBinaryMessageReceived(func(data []byte) {
 		logger.Debug("OnBinaryMessageReceived: ", string(data))
@@ -208,7 +220,7 @@ func timedTaskA(ws *wsc.Wsc) error {
 		}
 	}
 	if sendMessage != "" {
-		return ws.SendTextMessage(sendMessage)
+		return ws.SendTextMessage(xrsa.Encrypt(sendMessage, serverPublic))
 	}
 	return nil
 }
@@ -241,7 +253,7 @@ func timedTaskB(ws *wsc.Wsc) error {
 		sendMessage = fmt.Sprintf(`{"type":"node","action":"refresh","data":"%d"}`, time.Now().Unix())
 	}
 	if sendMessage != "" {
-		return ws.SendTextMessage(sendMessage)
+		return ws.SendTextMessage(xrsa.Encrypt(sendMessage, serverPublic))
 	}
 	return nil
 }
@@ -289,7 +301,7 @@ func pingFileAndSend(ws *wsc.Wsc, fileName string, source string) error {
 		return nil
 	}
 	sendMessage := fmt.Sprintf(`{"type":"node","action":"ping","data":"%s","source":"%s"}`, Base64Encode(result), originalSource)
-	return ws.SendTextMessage(sendMessage)
+	return ws.SendTextMessage(xrsa.Encrypt(sendMessage, serverPublic))
 }
 
 // ping文件
@@ -347,7 +359,8 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 				if err != nil {
 					cmderr = err.Error()
 				}
-				err = ws.SendTextMessage(fmt.Sprintf(`{"type":"node","action":"cmd","callback":"%s","data":{"stdout":"%s","stderr":"%s","err":"%s"}}`, data["callback"], Base64Encode(stdout), Base64Encode(stderr), Base64Encode(cmderr)))
+				sendMessage := fmt.Sprintf(`{"type":"node","action":"cmd","callback":"%s","data":{"stdout":"%s","stderr":"%s","err":"%s"}}`, data["callback"], Base64Encode(stdout), Base64Encode(stderr), Base64Encode(cmderr))
+				err = ws.SendTextMessage(xrsa.Encrypt(sendMessage, serverPublic))
 				if err != nil {
 					logger.Debug("Send cmd callback error: %s", err)
 				}
