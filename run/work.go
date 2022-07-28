@@ -59,6 +59,10 @@ func WorkStart() {
 	//
 	origin := strings.Replace(os.Getenv("SERVER_URL"), "https://", "wss://", 1)
 	origin = strings.Replace(origin, "http://", "ws://", 1)
+	if strings.Count(origin, "/") > 2 {
+		origins := strings.Split(origin, "/")
+		origin = fmt.Sprintf("%s/%s/%s", origins[0], origins[1], origins[2])
+	}
 	nodeName, _, _ := Command("-c", "hostname")
 	serverUrl := fmt.Sprintf("%s/ws?action=nodework&nodemode=%s&nodetoken=%s&nodename=%s", origin, os.Getenv("NODE_MODE"), os.Getenv("NODE_TOKEN"), nodeName)
 	//

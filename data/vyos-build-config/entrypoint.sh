@@ -2,16 +2,6 @@
 
 binDir="/usr/lib/hicloud/bin"
 
-get_wsurl() {
-    local host=$(echo "$SERVER_URL" | awk -F "/" '{print $3}')
-    local exi=$(echo "$SERVER_URL" | grep 'https://')
-    if [ -n "$exi" ]; then
-        echo "wss://${host}/ws"
-    else
-        echo "ws://${host}/ws"
-    fi
-}
-
 check_network() {
     local target=$SERVER_URL
     local ret_code=`curl -I -s --connect-timeout 1 -m 5 ${target} -w %{http_code} | tail -n1`
@@ -24,9 +14,8 @@ check_network() {
 }
 
 check_work() {
-    local url=`get_wsurl`
     local exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
-    [ -n "$url" ] && [ -z "$exist" ] && {
+    [ -z "$exist" ] && {
         check_network
         if [ $? -eq 0 ]; then
             echo "network is blocked, try again 10 seconds"
