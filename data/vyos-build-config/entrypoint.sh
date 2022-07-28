@@ -18,8 +18,9 @@ check_work() {
     [ -z "$exist" ] && {
         check_network
         if [ $? -eq 0 ]; then
-            echo "network is blocked, try again 10 seconds"
+            echo "network error, try 10s"
         else
+            echo "work start"
             nohup ${binDir}/hios work > /dev/null 2>&1 &
         fi
     }
@@ -34,6 +35,7 @@ expect "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-loc
 expect "#" { send "set system name-server 8.8.8.8\n" }
 expect "#" { send "commit\n" }
 expect "#" { send "exit\n" } expect eof
+interact
 EOF
 }
 
