@@ -6,7 +6,8 @@ import (
 )
 
 type RsaJson struct {
-	Path string
+	Public  string
+	Private string
 }
 
 type State struct {

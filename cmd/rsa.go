@@ -11,8 +11,12 @@ var rsaCmd = &cobra.Command{
 	Use:   "rsa",
 	Short: "Rsa",
 	PreRun: func(cmd *cobra.Command, args []string) {
-		if run.RsaConf.Path == "" {
-			run.PrintError("The path are required")
+		if run.RsaConf.Public == "" {
+			run.PrintError("The public path are required")
+			os.Exit(0)
+		}
+		if run.RsaConf.Private == "" {
+			run.PrintError("The private path are required")
 			os.Exit(0)
 		}
 	},
@@ -23,5 +27,6 @@ var rsaCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(rsaCmd)
-	rsaCmd.Flags().StringVar(&run.RsaConf.Path, "path", "", "")
+	rsaCmd.Flags().StringVar(&run.RsaConf.Public, "public", "", "Public path")
+	rsaCmd.Flags().StringVar(&run.RsaConf.Private, "private", "", "Private path")
 }
