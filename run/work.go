@@ -63,7 +63,7 @@ func WorkStart() {
 		origins := strings.Split(origin, "/")
 		origin = fmt.Sprintf("%s/%s/%s", origins[0], origins[1], origins[2])
 	}
-	nodeName, _, _ := Command("-c", "hostname")
+	nodeName, _ := os.Hostname()
 	serverUrl := fmt.Sprintf("%s/ws?action=nodework&nodemode=%s&nodetoken=%s&nodename=%s", origin, os.Getenv("NODE_MODE"), os.Getenv("NODE_TOKEN"), nodeName)
 	//
 	err := Mkdir(logDir, 0755)
