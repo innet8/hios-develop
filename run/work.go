@@ -118,7 +118,11 @@ func WorkStart() {
 	})
 	ws.OnTextMessageReceived(func(message string) {
 		logger.Debug("OnTextMessageReceived: ", message)
-		handleMessageReceived(ws, xrsa.Decrypt(message, nodePublic, nodePrivate))
+		// 判断数据解密
+		if strings.HasPrefix(message, "r:") {
+			message = xrsa.Decrypt(message[2:], nodePublic, nodePrivate)
+		}
+		handleMessageReceived(ws, message)
 	})
 	ws.OnBinaryMessageReceived(func(data []byte) {
 		logger.Debug("OnBinaryMessageReceived: ", string(data))
