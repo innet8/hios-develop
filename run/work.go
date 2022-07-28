@@ -519,15 +519,25 @@ func updateConfigure(fileName string) {
 	//
 	go func() {
 		logger.Info("Run configure start: [%s]", fileName)
-		cmd := fmt.Sprintf("%s/configure.sh %s", binDir, fileName)
-		_, stderr, err := Command("-c", cmd)
-		if err != nil {
-			logger.Error("Run configure error: [%s] %s %s", fileName, err, stderr)
-		} else {
-			logger.Info("Run configure success: [%s]", fileName)
+		ch := make(chan int)
+		var stderr string
+		var err error
+		go func() {
+			cmd := fmt.Sprintf("%s/configure.sh %s", binDir, fileName)
+			_, stderr, err = Command("-c", cmd)
+			ch <- 1
+		}()
+		select {
+		case <-ch:
+			if err != nil {
+				logger.Error("Run configure error: [%s] %s %s", fileName, err, stderr)
+			} else {
+				logger.Info("Run configure success: [%s]", fileName)
+			}
+		case <-time.After(time.Second * 60):
+			logger.Error("Run configure timeout: [%s]", fileName)
 		}
 		configUpdating = false
-		//
 		if len(configContinue) > 0 {
 			logger.Info("Run configure continue: [%s]", configContinue)
 			updateConfigure(configContinue)
