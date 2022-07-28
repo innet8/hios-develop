@@ -57,12 +57,10 @@ func WorkStart() {
 	nodePublic = ReadFile(fmt.Sprintf("%s/node_public", sshDir))
 	nodePrivate = ReadFile(fmt.Sprintf("%s/node_private", sshDir))
 	//
-	protocol := "ws://"
-	if strings.HasPrefix(os.Getenv("SERVER_URL"), "https://") {
-		protocol = "wss://"
-	}
+	origin := strings.Replace(os.Getenv("SERVER_URL"), "https://", "wss://", 1)
+	origin = strings.Replace(origin, "http://", "ws://", 1)
 	nodeName, _, _ := Command("-c", "hostname")
-	serverUrl := fmt.Sprintf("%s?action=nodework&nodemode=%s&nodetoken=%s&nodename=%s", protocol, os.Getenv("NODE_MODE"), os.Getenv("NODE_TOKEN"), nodeName)
+	serverUrl := fmt.Sprintf("%s/ws?action=nodework&nodemode=%s&nodetoken=%s&nodename=%s", origin, os.Getenv("NODE_MODE"), os.Getenv("NODE_TOKEN"), nodeName)
 	//
 	err := Mkdir(logDir, 0755)
 	if err != nil {
