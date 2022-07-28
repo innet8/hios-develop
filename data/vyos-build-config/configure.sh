@@ -9,5 +9,6 @@ expect "$" { send "configure\n" }
 expect "#" { send "load ${file}\n" }
 expect "#" { send "commit\n" }
 expect "#" { send "exit\n" } expect eof
+interact
 EOF
 fi
