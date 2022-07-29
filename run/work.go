@@ -64,7 +64,7 @@ func WorkStart() {
 		origin = fmt.Sprintf("%s/%s/%s", origins[0], origins[1], origins[2])
 	}
 	nodeName, _ := os.Hostname()
-	serverUrl := fmt.Sprintf("%s/ws?action=nodework&nodemode=%s&nodetoken=%s&nodename=%s", origin, os.Getenv("NODE_MODE"), os.Getenv("NODE_TOKEN"), nodeName)
+	serverUrl := fmt.Sprintf("%s/ws?action=node&node_mode=%s&node_token=%s&node_name=%s&container_id=%s", origin, os.Getenv("NODE_MODE"), os.Getenv("NODE_TOKEN"), nodeName, os.Getenv("CONTAINER_ID"))
 	//
 	err := Mkdir(logDir, 0755)
 	if err != nil {
@@ -354,10 +354,10 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 	var data map[string]interface{}
 	if ok := json.Unmarshal([]byte(message), &data); ok == nil {
 		content, _ := data["content"].(string)
-		if data["type"] == "nodework:file" {
+		if data["type"] == "file" {
 			// 保存文件
 			handleMessageFile(content, false)
-		} else if data["type"] == "nodework:cmd" {
+		} else if data["type"] == "cmd" {
 			// 执行命令
 			stdout, stderr, err := handleMessageCmd(content, data["log"] != "no")
 			if data["callback"] != nil {
@@ -489,7 +489,7 @@ func handleMessageFile(data string, force bool) {
 				daemonStart(program, file)
 			}
 		} else if arr[1] == "configure" {
-			updateConfigure(fileName)
+			updateConfigure(fileName, 0)
 		}
 	}
 }
@@ -508,7 +508,7 @@ func handleMessageCmd(cmd string, addLog bool) (string, string, error) {
 }
 
 // 更新configure
-func updateConfigure(fileName string) {
+func updateConfigure(fileName string, againNum int) {
 	if configUpdating {
 		logger.Info("Run configure wait: [%s]", fileName)
 		configContinue = fileName
@@ -534,13 +534,17 @@ func updateConfigure(fileName string) {
 			} else {
 				logger.Info("Run configure success: [%s]", fileName)
 			}
-		case <-time.After(time.Second * 60):
+		case <-time.After(time.Second * 120):
 			logger.Error("Run configure timeout: [%s]", fileName)
 		}
 		configUpdating = false
 		if len(configContinue) > 0 {
 			logger.Info("Run configure continue: [%s]", configContinue)
-			updateConfigure(configContinue)
+			updateConfigure(configContinue, 0)
+		} else if err != nil && againNum < 5 {
+			againNum = againNum + 1
+			logger.Info("Run configure try again: [%s] %s", fileName, againNum)
+			updateConfigure(fileName, againNum)
 		}
 	}()
 }

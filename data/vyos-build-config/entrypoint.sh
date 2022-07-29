@@ -1,6 +1,7 @@
 #!/bin/bash
 
 binDir="/usr/lib/hicloud/bin"
+workEnd="no"
 
 check_network() {
     local target=$SERVER_URL
@@ -22,6 +23,7 @@ check_work() {
         else
             echo "work start"
             nohup ${binDir}/hios work > /dev/null 2>&1 &
+            workEnd="yes"
         fi
     }
 }
@@ -37,6 +39,7 @@ expect "#" { send "commit\n" }
 expect "#" { send "exit\n" } expect eof
 interact
 EOF
+    echo "nameserver 127.0.0.11" > /etc/resolv.dnsmasq.conf
 }
 
 init_work() {
@@ -52,7 +55,7 @@ init_work() {
         chmod +x ${binDir}/configure.sh
     fi
 
-    while true; do
+    while [ "${workEnd}" = "no" ]; do
         sleep 10
         check_work > /dev/null 2>&1 &
     done
