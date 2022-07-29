@@ -57,14 +57,14 @@ func WorkStart() {
 	nodePublic = ReadFile(fmt.Sprintf("%s/node_public", sshDir))
 	nodePrivate = ReadFile(fmt.Sprintf("%s/node_private", sshDir))
 	//
-	origin := strings.Replace(os.Getenv("SERVER_URL"), "https://", "wss://", 1)
+	origin := strings.Replace(os.Getenv("HI_URL"), "https://", "wss://", 1)
 	origin = strings.Replace(origin, "http://", "ws://", 1)
 	if strings.Count(origin, "/") > 2 {
 		origins := strings.Split(origin, "/")
 		origin = fmt.Sprintf("%s/%s/%s", origins[0], origins[1], origins[2])
 	}
 	nodeName, _ := os.Hostname()
-	serverUrl := fmt.Sprintf("%s/ws?action=node&node_mode=%s&node_token=%s&node_name=%s&container_id=%s", origin, os.Getenv("NODE_MODE"), os.Getenv("NODE_TOKEN"), nodeName, os.Getenv("CONTAINER_ID"))
+	wsUrl := fmt.Sprintf("%s/ws?action=hios&mode=%s&token=%s&name=%s&cid=%s", origin, os.Getenv("HI_MODE"), os.Getenv("HI_TOKEN"), nodeName, os.Getenv("HI_CID"))
 	//
 	err := Mkdir(logDir, 0755)
 	if err != nil {
@@ -75,7 +75,7 @@ func WorkStart() {
 	startRun()
 	//
 	done := make(chan bool)
-	ws := wsc.New(serverUrl)
+	ws := wsc.New(wsUrl)
 	// 自定义配置
 	ws.SetConfig(&wsc.Config{
 		WriteWait:         10 * time.Second,
@@ -202,9 +202,9 @@ func startRun() {
 
 // 定时任务A（上报：系统状态、入口网速）
 func timedTaskA(ws *wsc.Wsc) error {
-	nodeMode := os.Getenv("NODE_MODE")
+	hiMode := os.Getenv("HI_MODE")
 	sendMessage := ""
-	if nodeMode == "host" {
+	if hiMode == "host" {
 		hostState = GetHostState(hostState)
 		if hostState != nil {
 			value, err := json.Marshal(hostState)
@@ -214,7 +214,7 @@ func timedTaskA(ws *wsc.Wsc) error {
 				sendMessage = messageEncrypt(`{"type":"node","action":"state","data":"%s"}`, Base64Encode(string(value)))
 			}
 		}
-	} else if nodeMode == "hihub" {
+	} else if hiMode == "hihub" {
 		netIoInNic = GetNetIoInNic(netIoInNic)
 		if netIoInNic != nil {
 			value, err := json.Marshal(netIoInNic)
@@ -233,9 +233,9 @@ func timedTaskA(ws *wsc.Wsc) error {
 
 // 定时任务B（上报：ping结果、流量统计）
 func timedTaskB(ws *wsc.Wsc) error {
-	nodeMode := os.Getenv("NODE_MODE")
+	hiMode := os.Getenv("HI_MODE")
 	sendMessage := ""
-	if nodeMode == "hihub" {
+	if hiMode == "hihub" {
 		// 公网 ping
 		sendErr := pingFileAndSend(ws, fmt.Sprintf("%s/ips", workDir), "")
 		if sendErr != nil {

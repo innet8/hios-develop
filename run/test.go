@@ -9,8 +9,8 @@ import (
 
 //BuildTest is
 func BuildTest() {
-	nodeMode := os.Getenv("NODE_MODE")
-	logger.Debug("NODE_MODE: %s", nodeMode)
+	hiMode := os.Getenv("HI_MODE")
+	logger.Debug("HI_MODE: %s", hiMode)
 
 	ex, err := os.Executable()
 	if err != nil {

@@ -12,16 +12,16 @@ var workCmd = &cobra.Command{
 	Use:   "work",
 	Short: "Work",
 	PreRun: func(cmd *cobra.Command, args []string) {
-		if os.Getenv("SERVER_URL") == "" {
-			run.PrintError("Environment error: SERVER_URL")
+		if os.Getenv("HI_URL") == "" {
+			run.PrintError("Environment error: HI_URL")
 			os.Exit(0)
 		}
-		if os.Getenv("NODE_MODE") == "" {
-			run.PrintError("Environment error: NODE_MODE")
+		if os.Getenv("HI_MODE") == "" {
+			run.PrintError("Environment error: HI_MODE")
 			os.Exit(0)
 		}
-		if os.Getenv("NODE_TOKEN") == "" {
-			run.PrintError("Environment error: NODE_TOKEN")
+		if os.Getenv("HI_TOKEN") == "" {
+			run.PrintError("Environment error: HI_TOKEN")
 			os.Exit(0)
 		}
 	},

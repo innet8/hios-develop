@@ -4,7 +4,7 @@ binDir="/usr/lib/hicloud/bin"
 workEnd="no"
 
 check_network() {
-    local target=$SERVER_URL
+    local target=$HI_URL
     local ret_code=`curl -I -s --connect-timeout 1 -m 5 ${target} -w %{http_code} | tail -n1`
     if [ "x$ret_code" = "x200" ] || [ "x$ret_code" = "x301" ] || [ "x$ret_code" = "x302" ]; then
         return 1
