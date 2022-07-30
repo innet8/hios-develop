@@ -134,6 +134,12 @@ type logConfig struct {
 	Conn       *connLogger    `json:"Conn,omitempty"`
 }
 
+type sendModel struct {
+	Type   string      `json:"type"`
+	Action string      `json:"action"`
+	Data   interface{} `json:"data"`
+}
+
 func init() {
 	defaultLogger = NewLogger(3)
 }
@@ -226,10 +232,14 @@ func (this *LocalLogger) writeToLoggers(when time.Time, msg *loginfo, level int)
 		if err != nil {
 			return
 		}
-		data := fmt.Sprintf(`{"type":"node","action":"log","data":"%s"}`, Base64Encode(string(ss)))
-		err = sendWebsocketMessage(data)
-		if err == wsc.CloseErr {
-			wsErrorMsg = append(wsErrorMsg, data)
+		sendData := &sendModel{Type: "node", Action: "log", Data: string(ss)}
+		sendRes, sendErr := json.Marshal(sendData)
+		if sendErr == nil {
+			data := string(sendRes)
+			err = sendWebsocketMessage(data)
+			if err == wsc.CloseErr {
+				wsErrorMsg = append(wsErrorMsg, data)
+			}
 		}
 	}
 }

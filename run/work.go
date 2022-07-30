@@ -39,22 +39,40 @@ var (
 	daemonMap = make(map[string]string)
 )
 
-type MsgModel struct {
+type msgModel struct {
 	Type string    `json:"type"`
-	File FileModel `json:"file"`
-	Cmd  CmdModel  `json:"cmd"`
+	File fileModel `json:"file"`
+	Cmd  cmdModel  `json:"cmd"`
 }
 
-type FileModel struct {
+type fileModel struct {
 	Type    string `json:"type"`
 	Path    string `json:"path"`
 	Content string `json:"content"`
 }
 
-type CmdModel struct {
+type cmdModel struct {
 	Log      bool   `json:"log"`
 	Callback string `json:"callback"`
 	Content  string `json:"content"`
+}
+
+type sendModel struct {
+	Type   string      `json:"type"`
+	Action string      `json:"action"`
+	Data   interface{} `json:"data"`
+}
+
+type pingModel struct {
+	Result string `json:"result"`
+	Source string `json:"source"`
+}
+
+type callModel struct {
+	Callback string `json:"callback"`
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+	Err      string `json:"err"`
 }
 
 // WorkStart Work开始
@@ -229,7 +247,7 @@ func timedTaskA(ws *wsc.Wsc) error {
 			if err != nil {
 				logger.Error("State host: %s", err)
 			} else {
-				sendMessage = messageEncrypt(`{"type":"node","action":"state","data":"%s"}`, Base64Encode(string(value)))
+				sendMessage = formatSendMsg("state", string(value))
 			}
 		}
 	} else if hiMode == "hihub" {
@@ -239,7 +257,7 @@ func timedTaskA(ws *wsc.Wsc) error {
 			if err != nil {
 				logger.Error("NetIoInNic: %s", err)
 			} else {
-				sendMessage = messageEncrypt(`{"type":"node","action":"netio","data":"%s"}`, Base64Encode(string(value)))
+				sendMessage = formatSendMsg("netio", string(value))
 			}
 		}
 	}
@@ -271,10 +289,10 @@ func timedTaskB(ws *wsc.Wsc) error {
 				}
 			}
 		}
-		// todo wg 流量统计
+		// wg 流量统计 todo
 	} else {
 		// 发送刷新
-		sendMessage = fmt.Sprintf(`{"type":"node","action":"refresh","data":"%d"}`, time.Now().Unix())
+		sendMessage = formatSendMsg("refresh", time.Now().Unix())
 	}
 	if sendMessage != "" {
 		return ws.SendTextMessage(sendMessage)
@@ -324,7 +342,8 @@ func pingFileAndSend(ws *wsc.Wsc, fileName string, source string) error {
 		logger.Debug("Ping error [%s]: %s", fileName, err)
 		return nil
 	}
-	sendMessage := messageEncrypt(`{"type":"node","action":"ping","data":"%s","source":"%s"}`, Base64Encode(result), originalSource)
+	pingData := &pingModel{Result: result, Source: originalSource}
+	sendMessage := formatSendMsg("ping", pingData)
 	return ws.SendTextMessage(sendMessage)
 }
 
@@ -369,7 +388,7 @@ func pingFileMap(path string, source string, timeout int, count int) (map[string
 
 // 处理消息
 func handleMessageReceived(ws *wsc.Wsc, message string) {
-	var data MsgModel
+	var data msgModel
 	if ok := json.Unmarshal([]byte(message), &data); ok == nil {
 		if data.Type == "file" {
 			// 保存文件
@@ -382,7 +401,12 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 				if err != nil {
 					cmderr = err.Error()
 				}
-				sendMessage := messageEncrypt(`{"type":"node","action":"cmd","callback":"%s","data":{"stdout":"%s","stderr":"%s","err":"%s"}}`, data.Cmd.Callback, Base64Encode(stdout), Base64Encode(stderr), Base64Encode(cmderr))
+				callData := &callModel{
+					Callback: data.Cmd.Callback,
+					Stdout:   stdout,
+					Stderr:   stderr,
+					Err:      cmderr}
+				sendMessage := formatSendMsg("cmd", callData)
 				err = ws.SendTextMessage(sendMessage)
 				if err != nil {
 					logger.Debug("Send cmd callback error: %s", err)
@@ -392,16 +416,23 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 	}
 }
 
-// 加密传输数据
-func messageEncrypt(msg string, v ...interface{}) string {
-	if len(v) > 0 {
-		msg = fmt.Sprintf(msg, v...)
+// 格式化要发送的消息
+func formatSendMsg(action string, data interface{}) string {
+	sendData := &sendModel{Type: "node", Action: action, Data: data}
+	sendRes, sendErr := json.Marshal(sendData)
+	if sendErr != nil {
+		return ""
 	}
-	return fmt.Sprintf("r:%s", xrsa.Encrypt(msg, serverPublic))
+	msg := string(sendRes)
+	if len(serverPublic) > 0 {
+		return fmt.Sprintf("r:%s", xrsa.Encrypt(msg, serverPublic))
+	} else {
+		return msg
+	}
 }
 
 // 保存文件或运行文件
-func handleMessageFile(fileData FileModel, force bool) {
+func handleMessageFile(fileData fileModel, force bool) {
 	var err error
 	fileName := ""
 	if strings.HasPrefix(fileData.Path, "/") {
@@ -568,7 +599,7 @@ func killPsef(value string) {
 }
 
 // 守护进程
-func daemonStart(value string, fileData FileModel) {
+func daemonStart(value string, fileData fileModel) {
 	// 每10秒检测一次
 	rand := RandString(6)
 	daemonMap[value] = rand
