@@ -572,13 +572,20 @@ func updateConfigure(fileName string, againNum int) {
 		case <-time.After(time.Second * 120):
 			logger.Error("Run configure timeout: [%s]", fileName)
 		}
+		if err != nil {
+			d := 5 + againNum
+			if d > 10 {
+				d = 10
+			}
+			time.Sleep(time.Duration(d) * time.Second)
+		}
 		configUpdating = false
 		if len(configContinue) > 0 {
 			logger.Info("Run configure continue: [%s]", configContinue)
 			updateConfigure(configContinue, 0)
-		} else if err != nil && againNum < 5 {
+		} else if err != nil && againNum < 10 {
 			againNum = againNum + 1
-			logger.Info("Run configure try again: [%s] %s", fileName, againNum)
+			logger.Info("Run configure try again: [%s] %d", fileName, againNum)
 			updateConfigure(fileName, againNum)
 		}
 	}()
