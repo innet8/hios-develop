@@ -23,13 +23,6 @@ interact
 EOF
     echo "nameserver 127.0.0.11" > /etc/resolv.dnsmasq.conf
 
-    load_hios now
-}
-
-load_hios() {
-    if [ "$1" = "wait" ]; then
-        sleep 5
-    fi
     exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
     if [ -z "$exist" ]; then
         nohup ${binDir}/hios work > /dev/null 2>&1 &
@@ -58,9 +51,6 @@ EOF
 if [ "$1" = "load" ]; then
     # 加载配置文件：文件路径
     load_boot $2
-elif [ "$1" = "start" ]; then
-    # 启动hios
-    load_hios wait > /dev/null 2>&1 &
 else
     # 初始化并启动hios
     load_init

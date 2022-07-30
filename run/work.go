@@ -412,15 +412,6 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 					logger.Debug("Send cmd callback error: %s", err)
 				}
 			}
-		} else if data.Type == "restart" {
-			// 重启hios
-			if os.Getenv("HI_MODE") == "host" {
-				_, _, _ = Command("-c", "supervisorctl restart hios")
-			} else {
-				cmd := fmt.Sprintf("%s/entrypoint.sh start", binDir)
-				_, _, _ = Command("-c", cmd)
-				os.Exit(0)
-			}
 		}
 	}
 }
