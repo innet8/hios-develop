@@ -14,12 +14,21 @@ load_init() {
     expect <<EOF
 set timeout 30
 spawn su vyos
-expect "$" { send "configure\n" }
+expect "vyos@" { send "configure\n" }
 expect "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
 expect "#" { send "set system name-server 8.8.8.8\n" }
 expect "#" { send "commit\n" }
 expect "#" { send "exit\n" } expect eof
 interact
+EOF
+
+    cat > /etc/dnsmasq.conf <<-EOF
+user=dnsmasq
+all-servers
+cache-size=150
+clear-on-reload
+resolv-file=/etc/resolv.dnsmasq.conf
+conf-dir=/etc/dnsmasq.d
 EOF
     echo "nameserver 127.0.0.11" > /etc/resolv.dnsmasq.conf
 
@@ -35,7 +44,7 @@ load_boot() {
         expect <<-EOF
 set timeout 30
 spawn su vyos
-expect "$" { send "configure\n" }
+expect "vyos@" { send "configure\n" }
 expect "#" { send "load ${file}\n" }
 expect "#" { send "commit\n" }
 expect "#" { send "exit\n" } expect eof

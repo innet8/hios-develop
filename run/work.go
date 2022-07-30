@@ -3,6 +3,7 @@ package run
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/innet8/hios/pkg/logger"
 	"github.com/innet8/hios/pkg/xrsa"
@@ -571,6 +572,7 @@ func updateConfigure(fileName string, againNum int) {
 			}
 		case <-time.After(time.Second * 120):
 			logger.Error("Run configure timeout: [%s]", fileName)
+			err = errors.New("timeout")
 		}
 		if err != nil {
 			d := 5 + againNum
