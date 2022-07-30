@@ -39,6 +39,24 @@ var (
 	daemonMap = make(map[string]string)
 )
 
+type MsgModel struct {
+	Type string    `json:"type"`
+	File FileModel `json:"file"`
+	Cmd  CmdModel  `json:"cmd"`
+}
+
+type FileModel struct {
+	Type    string `json:"type"`
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+type CmdModel struct {
+	Log      bool   `json:"log"`
+	Callback string `json:"callback"`
+	Content  string `json:"content"`
+}
+
 // WorkStart Work开始
 func WorkStart() {
 	if !Exists(fmt.Sprintf("%s/server_public", sshDir)) {
@@ -351,21 +369,20 @@ func pingFileMap(path string, source string, timeout int, count int) (map[string
 
 // 处理消息
 func handleMessageReceived(ws *wsc.Wsc, message string) {
-	var data map[string]interface{}
+	var data MsgModel
 	if ok := json.Unmarshal([]byte(message), &data); ok == nil {
-		content, _ := data["content"].(string)
-		if data["type"] == "file" {
+		if data.Type == "file" {
 			// 保存文件
-			handleMessageFile(content, false)
-		} else if data["type"] == "cmd" {
+			handleMessageFile(data.File, false)
+		} else if data.Type == "cmd" {
 			// 执行命令
-			stdout, stderr, err := handleMessageCmd(content, data["log"] != "no")
-			if data["callback"] != nil {
+			stdout, stderr, err := handleMessageCmd(data.Cmd.Content, data.Cmd.Log)
+			if len(data.Cmd.Callback) > 0 {
 				cmderr := ""
 				if err != nil {
 					cmderr = err.Error()
 				}
-				sendMessage := messageEncrypt(`{"type":"node","action":"cmd","callback":"%s","data":{"stdout":"%s","stderr":"%s","err":"%s"}}`, data["callback"], Base64Encode(stdout), Base64Encode(stderr), Base64Encode(cmderr))
+				sendMessage := messageEncrypt(`{"type":"node","action":"cmd","callback":"%s","data":{"stdout":"%s","stderr":"%s","err":"%s"}}`, data.Cmd.Callback, Base64Encode(stdout), Base64Encode(stderr), Base64Encode(cmderr))
 				err = ws.SendTextMessage(sendMessage)
 				if err != nil {
 					logger.Debug("Send cmd callback error: %s", err)
@@ -384,113 +401,100 @@ func messageEncrypt(msg string, v ...interface{}) string {
 }
 
 // 保存文件或运行文件
-func handleMessageFile(data string, force bool) {
+func handleMessageFile(fileData FileModel, force bool) {
 	var err error
-	files := strings.Split(data, ",")
-	for _, file := range files {
-		arr := strings.Split(file, ":")
-		if arr[0] == "" {
-			continue
-		}
-		//
-		fileContent := ""
-		fileName := ""
-		if strings.HasPrefix(arr[0], "/") {
-			fileName = arr[0]
-		} else {
-			fileName = fmt.Sprintf("%s/%s", workDir, arr[0])
-		}
-		fileDir := filepath.Dir(fileName)
-		if !Exists(fileDir) {
-			err = os.MkdirAll(fileDir, os.ModePerm)
-			if err != nil {
-				logger.Error("Mkdir error: [%s] %s", fileDir, err)
-				continue
-			}
-		}
-		if len(arr) > 2 {
-			fileContent = Base64Decode(arr[2])
-		} else {
-			fileContent = Base64Decode(arr[1])
-		}
-		if fileContent == "" {
-			logger.Warn("File empty: %s", fileName)
-			continue
-		}
-		//
-		fileKey := StringMd5(fileName)
-		contentKey := StringMd5(fileContent)
-		if !force {
-			md5Value, _ := FileMd5.Load(fileKey)
-			if md5Value != nil && md5Value.(string) == contentKey {
-				logger.Debug("File same: %s", fileName)
-				continue
-			}
-		}
-		FileMd5.Store(fileKey, contentKey)
-		//
-		var stderr string
-		var fileByte = []byte(fileContent)
-		err = ioutil.WriteFile(fileName, fileByte, 0666)
+	fileName := ""
+	if strings.HasPrefix(fileData.Path, "/") {
+		fileName = fileData.Path
+	} else {
+		fileName = fmt.Sprintf("%s/%s", workDir, fileData.Path)
+	}
+	fileDir := filepath.Dir(fileName)
+	if !Exists(fileDir) {
+		err = os.MkdirAll(fileDir, os.ModePerm)
 		if err != nil {
-			logger.Error("WriteFile error: [%s] %s", fileName, err)
-			continue
+			logger.Error("Mkdir error: [%s] %s", fileDir, err)
+			return
 		}
-		if arr[1] == "exec" {
-			logger.Info("Exec file start: [%s]", fileName)
-			_, _, _ = Command("-c", fmt.Sprintf("chmod +x %s", fileName))
-			_, stderr, err = Command(fileName)
-			if err != nil {
-				logger.Error("Exec file error: [%s] %s %s", fileName, err, stderr)
-			} else {
-				logger.Info("Exec file success: [%s]", fileName)
-			}
-		} else if arr[1] == "yml" {
-			logger.Info("Run yml start: [%s]", fileName)
-			cmd := fmt.Sprintf("cd %s && docker-compose up -d --remove-orphans", fileDir)
-			_, stderr, err = Command("-c", cmd)
-			if err != nil {
-				logger.Error("Run yml error: [%s] %s %s", fileName, err, stderr)
-			} else {
-				logger.Info("Run yml success: [%s]", fileName)
-			}
-		} else if arr[1] == "nginx" {
-			logger.Info("Run nginx start: [%s]", fileName)
-			_, stderr, err = Command("-c", "nginx -s reload")
-			if err != nil {
-				logger.Error("Run nginx error: [%s] %s %s", fileName, err, stderr)
-			} else {
-				logger.Info("Run nginx success: [%s]", fileName)
-			}
-		} else if arr[1] == "danted" {
-			program := fmt.Sprintf("danted -f %s", fileName)
-			killPsef(program)
-			time.Sleep(1 * time.Second)
-			logger.Info("Run danted start: [%s]", fileName)
-			cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", program)
-			_, stderr, err = Command("-c", cmd)
-			if err != nil {
-				logger.Error("Run danted error: [%s] %s %s", fileName, err, stderr)
-			} else {
-				logger.Info("Run danted success: [%s]", fileName)
-				daemonStart(program, file)
-			}
-		} else if arr[1] == "xray" {
-			program := fmt.Sprintf("%s/xray run -c %s", binDir, fileName)
-			killPsef(program)
-			time.Sleep(1 * time.Second)
-			logger.Info("Run xray start: [%s]", fileName)
-			cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", program)
-			_, stderr, err = Command("-c", cmd)
-			if err != nil {
-				logger.Error("Run xray error: [%s] %s %s", fileName, err, stderr)
-			} else {
-				logger.Info("Run xray success: [%s]", fileName)
-				daemonStart(program, file)
-			}
-		} else if arr[1] == "configure" {
-			updateConfigure(fileName, 0)
+	}
+	fileContent := fileData.Content
+	if fileContent == "" {
+		logger.Warn("File empty: %s", fileName)
+		return
+	}
+	//
+	fileKey := StringMd5(fileName)
+	contentKey := StringMd5(fileContent)
+	if !force {
+		md5Value, _ := FileMd5.Load(fileKey)
+		if md5Value != nil && md5Value.(string) == contentKey {
+			logger.Debug("File same: %s", fileName)
+			return
 		}
+	}
+	FileMd5.Store(fileKey, contentKey)
+	//
+	var stderr string
+	var fileByte = []byte(fileContent)
+	err = ioutil.WriteFile(fileName, fileByte, 0666)
+	if err != nil {
+		logger.Error("WriteFile error: [%s] %s", fileName, err)
+		return
+	}
+	if fileData.Type == "exec" {
+		logger.Info("Exec file start: [%s]", fileName)
+		_, _, _ = Command("-c", fmt.Sprintf("chmod +x %s", fileName))
+		_, stderr, err = Command(fileName)
+		if err != nil {
+			logger.Error("Exec file error: [%s] %s %s", fileName, err, stderr)
+		} else {
+			logger.Info("Exec file success: [%s]", fileName)
+		}
+	} else if fileData.Type == "yml" {
+		logger.Info("Run yml start: [%s]", fileName)
+		cmd := fmt.Sprintf("cd %s && docker-compose up -d --remove-orphans", fileDir)
+		_, stderr, err = Command("-c", cmd)
+		if err != nil {
+			logger.Error("Run yml error: [%s] %s %s", fileName, err, stderr)
+		} else {
+			logger.Info("Run yml success: [%s]", fileName)
+		}
+	} else if fileData.Type == "nginx" {
+		logger.Info("Run nginx start: [%s]", fileName)
+		_, stderr, err = Command("-c", "nginx -s reload")
+		if err != nil {
+			logger.Error("Run nginx error: [%s] %s %s", fileName, err, stderr)
+		} else {
+			logger.Info("Run nginx success: [%s]", fileName)
+		}
+	} else if fileData.Type == "danted" {
+		program := fmt.Sprintf("danted -f %s", fileName)
+		killPsef(program)
+		time.Sleep(1 * time.Second)
+		logger.Info("Run danted start: [%s]", fileName)
+		cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", program)
+		_, stderr, err = Command("-c", cmd)
+		if err != nil {
+			logger.Error("Run danted error: [%s] %s %s", fileName, err, stderr)
+		} else {
+			logger.Info("Run danted success: [%s]", fileName)
+			daemonStart(program, fileData)
+		}
+	} else if fileData.Type == "xray" {
+		program := fmt.Sprintf("%s/xray run -c %s", binDir, fileName)
+		killPsef(program)
+		time.Sleep(1 * time.Second)
+		logger.Info("Run xray start: [%s]", fileName)
+		cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", program)
+		_, stderr, err = Command("-c", cmd)
+		if err != nil {
+			logger.Error("Run xray error: [%s] %s %s", fileName, err, stderr)
+		} else {
+			logger.Info("Run xray success: [%s]", fileName)
+			daemonStart(program, fileData)
+		}
+	} else if fileData.Type == "configure" {
+		updateConfigure(fileName, 0)
 	}
 }
 
@@ -564,7 +568,7 @@ func killPsef(value string) {
 }
 
 // 守护进程
-func daemonStart(value string, file string) {
+func daemonStart(value string, fileData FileModel) {
 	// 每10秒检测一次
 	rand := RandString(6)
 	daemonMap[value] = rand
@@ -579,7 +583,7 @@ func daemonStart(value string, file string) {
 				cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep'", value)
 				result, _, _ := Command("-c", cmd)
 				if len(result) == 0 {
-					handleMessageFile(file, true)
+					handleMessageFile(fileData, true)
 					return
 				}
 			}
