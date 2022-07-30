@@ -1,34 +1,16 @@
 #!/bin/bash
 
 binDir="/usr/lib/hicloud/bin"
-workEnd="no"
 
-check_network() {
-    local target=$HI_URL
-    local ret_code=`curl -I -s --connect-timeout 1 -m 5 ${target} -w %{http_code} | tail -n1`
-    if [ "x$ret_code" = "x200" ] || [ "x$ret_code" = "x301" ] || [ "x$ret_code" = "x302" ]; then
-        return 1
-    else
-        return 0
+load_init() {
+    if [ -f ${binDir}/hios ]; then
+        chmod +x ${binDir}/hios
     fi
-    return 0
-}
 
-check_work() {
-    local exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
-    [ -z "$exist" ] && {
-        check_network
-        if [ $? -eq 0 ]; then
-            echo "network error, try 10s"
-        else
-            echo "work start"
-            nohup ${binDir}/hios work > /dev/null 2>&1 &
-            workEnd="yes"
-        fi
-    }
-}
+    if [ -f ${binDir}/xray ]; then
+        chmod +x ${binDir}/xray
+    fi
 
-init_network() {
     expect <<EOF
 set timeout 30
 spawn su vyos
@@ -40,42 +22,46 @@ expect "#" { send "exit\n" } expect eof
 interact
 EOF
     echo "nameserver 127.0.0.11" > /etc/resolv.dnsmasq.conf
+
+    load_hios now
 }
 
-init_work() {
-    if [ -f ${binDir}/hios ]; then
-        chmod +x ${binDir}/hios
+load_hios() {
+    if [ "$1" = "wait" ]; then
+        sleep 5
     fi
-
-    if [ -f ${binDir}/xray ]; then
-        chmod +x ${binDir}/xray
+    exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
+    if [ -z "$exist" ]; then
+        nohup ${binDir}/hios work > /dev/null 2>&1 &
     fi
-
-    if [ -f ${binDir}/configure.sh ]; then
-        chmod +x ${binDir}/configure.sh
-    fi
-
-    while [ "${workEnd}" = "no" ]; do
-        sleep 10
-        check_work > /dev/null 2>&1 &
-    done
 }
 
+load_boot() {
+    file=$1
+    if [ -f "${file}" ]; then
+        expect <<-EOF
+set timeout 30
+spawn su vyos
+expect "$" { send "configure\n" }
+expect "#" { send "load ${file}\n" }
+expect "#" { send "commit\n" }
+expect "#" { send "exit\n" } expect eof
+interact
+EOF
+    fi
+}
 
-RUNDIR=$(cd `dirname $0`; pwd)
-PIDFILE="${RUNDIR}/.entrypoint.pid"
+########################################################################
+########################################################################
+########################################################################
 
-if [ -s ${PIDFILE} ]; then
-   SPID=`cat ${PIDFILE}`
-   if [ -e /proc/${SPID}/status ]; then
-      echo "The script is already running."
-      exit 1
-  fi
-  cat /dev/null > ${PIDFILE}
+if [ "$1" = "load" ]; then
+    # 加载配置文件：文件路径
+    load_boot $2
+elif [ "$1" = "start" ]; then
+    # 启动hios
+    load_hios wait > /dev/null 2>&1 &
+else
+    # 初始化并启动hios
+    load_init
 fi
-echo $$ > ${PIDFILE}
-
-init_network
-init_work
-
-cat /dev/null > ${PIDFILE}

@@ -412,6 +412,15 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 					logger.Debug("Send cmd callback error: %s", err)
 				}
 			}
+		} else if data.Type == "restart" {
+			// 重启hios
+			if os.Getenv("HI_MODE") == "host" {
+				_, _, _ = Command("-c", "supervisorctl restart hios")
+			} else {
+				cmd := fmt.Sprintf("%s/entrypoint.sh start", binDir)
+				_, _, _ = Command("-c", cmd)
+				os.Exit(0)
+			}
 		}
 	}
 }
@@ -558,7 +567,7 @@ func updateConfigure(fileName string, againNum int) {
 		var stderr string
 		var err error
 		go func() {
-			cmd := fmt.Sprintf("%s/configure.sh %s", binDir, fileName)
+			cmd := fmt.Sprintf("%s/entrypoint.sh load %s", binDir, fileName)
 			_, stderr, err = Command("-c", cmd)
 			ch <- 1
 		}()
