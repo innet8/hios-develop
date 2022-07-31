@@ -10,6 +10,8 @@ cat > /usr/sbin/hicloud <<-EOF
 echo "\$(date +%s)" > /tmp/.histart
 
 if [ "\$HI_MODE" = "hihub" ]; then
+    ln -s /usr/lib/hicloud / &> /dev/null
+
     chmod +x /usr/lib/hicloud/bin/entrypoint.sh
     nohup /usr/lib/hicloud/bin/entrypoint.sh > /dev/null 2>&1 &
 fi
