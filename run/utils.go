@@ -70,7 +70,7 @@ func Cmd(arg ...string) (string, error) {
 	command.Stderr = &output
 	err := command.Start()
 	if err != nil {
-		fmt.Println(output.String(), err)
+		return output.String(), err
 	}
 	_, err = command.Process.Wait()
 	return output.String(), err
