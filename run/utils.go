@@ -96,7 +96,7 @@ func Command(arg ...string) (string, error) {
 	//wait等待goroutine执行完，然后释放FD资源
 	//这个时候再kill掉shell进程就不会再等待了，会直接返回
 	if err = cmd.Wait(); err != nil {
-		return "", err
+		return b.String(), err
 	}
 	return b.String(), err
 }
