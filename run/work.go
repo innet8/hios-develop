@@ -71,8 +71,7 @@ type pingModel struct {
 
 type callModel struct {
 	Callback string `json:"callback"`
-	Stdout   string `json:"stdout"`
-	Stderr   string `json:"stderr"`
+	Output   string `json:"output"`
 	Err      string `json:"err"`
 }
 
@@ -233,7 +232,7 @@ func startRun() {
 	for i := range files {
 		file := files[i]
 		content := ReadFile(file)
-		_, _, _ = Command("-c", content)
+		_, _ = Cmd("-c", content)
 	}
 }
 
@@ -364,17 +363,17 @@ func pingFileMap(path string, source string, timeout int, count int) (map[string
 	if source != "" {
 		cmd = fmt.Sprintf("fping -A -u -q -4 -S %s -t %d -c %d -f %s", source, timeout, count, path)
 	}
-	_, result, err := Command("-c", cmd)
-	if result == "" && err != nil {
+	output, err := Cmd("-c", cmd)
+	if output == "" && err != nil {
 		return nil, err
 	}
-	result = strings.Replace(result, " ", "", -1)
+	output = strings.Replace(output, " ", "", -1)
 	spaceRe, errRe := regexp.Compile(`[/:=]`)
 	if errRe != nil {
 		return nil, err
 	}
 	var pingMap = make(map[string]float64)
-	scanner := bufio.NewScanner(strings.NewReader(result))
+	scanner := bufio.NewScanner(strings.NewReader(output))
 	for scanner.Scan() {
 		s := spaceRe.Split(scanner.Text(), -1)
 		if len(s) > 9 {
@@ -396,7 +395,7 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 			handleMessageFile(data.File, false)
 		} else if data.Type == "cmd" {
 			// 执行命令
-			stdout, stderr, err := handleMessageCmd(data.Cmd.Content, data.Cmd.Log)
+			output, err := handleMessageCmd(data.Cmd.Content, data.Cmd.Log)
 			if len(data.Cmd.Callback) > 0 {
 				cmderr := ""
 				if err != nil {
@@ -404,8 +403,7 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 				}
 				callData := &callModel{
 					Callback: data.Cmd.Callback,
-					Stdout:   stdout,
-					Stderr:   stderr,
+					Output:   output,
 					Err:      cmderr}
 				sendMessage := formatSendMsg("cmd", callData)
 				err = ws.SendTextMessage(sendMessage)
@@ -466,7 +464,7 @@ func handleMessageFile(fileData fileModel, force bool) {
 	}
 	FileMd5.Store(fileKey, contentKey)
 	//
-	var stderr string
+	var output string
 	var fileByte = []byte(fileContent)
 	err = ioutil.WriteFile(fileName, fileByte, 0666)
 	if err != nil {
@@ -475,27 +473,27 @@ func handleMessageFile(fileData fileModel, force bool) {
 	}
 	if fileData.Type == "exec" {
 		logger.Info("Exec file start: [%s]", fileName)
-		_, _, _ = Command("-c", fmt.Sprintf("chmod +x %s", fileName))
-		_, stderr, err = Command(fileName)
+		_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", fileName))
+		output, err = Cmd(fileName)
 		if err != nil {
-			logger.Error("Exec file error: [%s] %s %s", fileName, err, stderr)
+			logger.Error("Exec file error: [%s] %s %s", fileName, err, output)
 		} else {
 			logger.Info("Exec file success: [%s]", fileName)
 		}
 	} else if fileData.Type == "yml" {
 		logger.Info("Run yml start: [%s]", fileName)
 		cmd := fmt.Sprintf("cd %s && docker-compose up -d --remove-orphans", fileDir)
-		_, stderr, err = Command("-c", cmd)
+		output, err = Cmd("-c", cmd)
 		if err != nil {
-			logger.Error("Run yml error: [%s] %s %s", fileName, err, stderr)
+			logger.Error("Run yml error: [%s] %s %s", fileName, err, output)
 		} else {
 			logger.Info("Run yml success: [%s]", fileName)
 		}
 	} else if fileData.Type == "nginx" {
 		logger.Info("Run nginx start: [%s]", fileName)
-		_, stderr, err = Command("-c", "nginx -s reload")
+		output, err = Cmd("-c", "nginx -s reload")
 		if err != nil {
-			logger.Error("Run nginx error: [%s] %s %s", fileName, err, stderr)
+			logger.Error("Run nginx error: [%s] %s %s", fileName, err, output)
 		} else {
 			logger.Info("Run nginx success: [%s]", fileName)
 		}
@@ -505,9 +503,9 @@ func handleMessageFile(fileData fileModel, force bool) {
 		time.Sleep(1 * time.Second)
 		logger.Info("Run danted start: [%s]", fileName)
 		cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", program)
-		_, stderr, err = Command("-c", cmd)
+		output, err = Cmd("-c", cmd)
 		if err != nil {
-			logger.Error("Run danted error: [%s] %s %s", fileName, err, stderr)
+			logger.Error("Run danted error: [%s] %s %s", fileName, err, output)
 		} else {
 			logger.Info("Run danted success: [%s]", fileName)
 			daemonStart(program, fileData)
@@ -518,9 +516,9 @@ func handleMessageFile(fileData fileModel, force bool) {
 		time.Sleep(1 * time.Second)
 		logger.Info("Run xray start: [%s]", fileName)
 		cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", program)
-		_, stderr, err = Command("-c", cmd)
+		output, err = Cmd("-c", cmd)
 		if err != nil {
-			logger.Error("Run xray error: [%s] %s %s", fileName, err, stderr)
+			logger.Error("Run xray error: [%s] %s %s", fileName, err, output)
 		} else {
 			logger.Info("Run xray success: [%s]", fileName)
 			daemonStart(program, fileData)
@@ -531,16 +529,16 @@ func handleMessageFile(fileData fileModel, force bool) {
 }
 
 // 运行自定义脚本
-func handleMessageCmd(cmd string, addLog bool) (string, string, error) {
-	stdout, stderr, err := Command("-c", cmd)
+func handleMessageCmd(cmd string, addLog bool) (string, error) {
+	output, err := Cmd("-c", cmd)
 	if addLog {
 		if err != nil {
-			logger.Error("Run cmd error: [%s] %s; stdout: [%s]; stderr: [%s]", cmd, err, stdout, stderr)
+			logger.Error("Run cmd error: [%s] %s; output: [%s]", cmd, err, output)
 		} else {
 			logger.Info("Run cmd success: [%s]", cmd)
 		}
 	}
-	return stdout, stderr, err
+	return output, err
 }
 
 // 更新configure
@@ -556,17 +554,16 @@ func updateConfigure(fileName string, againNum int) {
 	go func() {
 		logger.Info("Run configure start: [%s]", fileName)
 		ch := make(chan int)
-		var stderr string
 		var err error
 		go func() {
 			cmd := fmt.Sprintf("%s/entrypoint.sh load %s", binDir, fileName)
-			_, stderr, err = Command("-c", cmd)
+			_, err = Cmd("-c", cmd)
 			ch <- 1
 		}()
 		select {
 		case <-ch:
 			if err != nil {
-				logger.Error("Run configure error: [%s] %s %s", fileName, err, stderr)
+				logger.Error("Run configure error: [%s] %s", fileName, err)
 			} else {
 				logger.Info("Run configure success: [%s]", fileName)
 			}
@@ -592,12 +589,12 @@ func updateConfigure(fileName string, againNum int) {
 // 杀死根据 ps -ef 查出来的
 func killPsef(value string) {
 	cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep' | awk '{print $2}'", value)
-	result, _, _ := Command("-c", cmd)
-	if len(result) > 0 {
-		sc := bufio.NewScanner(strings.NewReader(result))
+	output, _ := Cmd("-c", cmd)
+	if len(output) > 0 {
+		sc := bufio.NewScanner(strings.NewReader(output))
 		for sc.Scan() {
 			if len(sc.Text()) > 0 {
-				_, _, _ = Command("-c", fmt.Sprintf("kill -9 %s", sc.Text()))
+				_, _ = Cmd("-c", fmt.Sprintf("kill -9 %s", sc.Text()))
 			}
 		}
 	}
@@ -617,8 +614,8 @@ func daemonStart(value string, fileData fileModel) {
 					return
 				}
 				cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep'", value)
-				result, _, _ := Command("-c", cmd)
-				if len(result) == 0 {
+				output, _ := Cmd("-c", cmd)
+				if len(output) == 0 {
 					handleMessageFile(fileData, true)
 					return
 				}

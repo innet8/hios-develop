@@ -62,6 +62,18 @@ func Command(arg ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), err
 }
 
+// Cmd 执行命令
+func Cmd(arg ...string) (string, error) {
+	output, err := exec.Command("/bin/sh", arg...).CombinedOutput()
+	return string(output), err
+}
+
+// Bash 执行命令
+func Bash(arg ...string) (string, error) {
+	output, err := exec.Command("/bin/bash", arg...).CombinedOutput()
+	return string(output), err
+}
+
 // GetIp 获取IP地址
 func GetIp() (ip string) {
 	resp, _ := gohttp.NewRequest().Headers(map[string]string{
