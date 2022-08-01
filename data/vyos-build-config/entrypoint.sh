@@ -11,16 +11,20 @@ load_init() {
         chmod +x ${binDir}/xray
     fi
 
-    expect <<EOF
+    if [ -n "${HI_NETIP}"] && [ -n "${HI_NETGW}"]; then
+        expect <<EOF
 set timeout 30
 spawn su vyos
 expect "vyos@" { send "configure\n" }
-expect "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
 expect "#" { send "set system name-server 8.8.8.8\n" }
+expect "#" { send "set protocols static route 0.0.0.0/0 next-hop ${HI_NETGW}\n" }
+expect "#" { send "set interfaces ethernet eth0 address ${HI_NETIP}/24\n" }
+expect "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
 expect "#" { send "commit\n" }
 expect "#" { send "exit\n" } expect eof
 interact
 EOF
+    fi
 
     cat > /etc/dnsmasq.conf <<-EOF
 user=dnsmasq

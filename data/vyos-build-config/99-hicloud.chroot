@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 让root保存环境变量
-echo 'Defaults env_keep += "HI_URL HI_MODE HI_TOKEN HI_CID"' >> /etc/sudoers
+echo 'Defaults env_keep += "HI_URL HI_MODE HI_TOKEN HI_CID HI_NETIP HI_NETGW"' >> /etc/sudoers
 
 # command入口执行文件
 cat > /usr/sbin/hicloud <<-EOF
