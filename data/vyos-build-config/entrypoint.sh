@@ -1,6 +1,7 @@
 #!/bin/bash
 
 binDir="/usr/lib/hicloud/bin"
+tmpDir="/usr/lib/hicloud/tmp"
 
 load_init() {
     if [ -f ${binDir}/hios ]; then
@@ -27,8 +28,9 @@ expect "#" { send "set interfaces ethernet eth0 address ${HI_NETIP}/24\n" }
 expect "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
 expect "#" { send "commit\n" }
 expect "#" { send "save\n" }
-expect "#" { send "exit\n" } expect eof
-interact
+expect "#" { send "exit\n" }
+expect "vyos@" { send "exit\n" }
+expect eof
 EOF
     fi
 
@@ -53,8 +55,9 @@ expect "vyos@" { send "configure\n" }
 expect "#" { send "load ${file}\n" }
 expect "#" { send "commit\n" }
 expect "#" { send "save\n" }
-expect "#" { send "exit\n" } expect eof
-interact
+expect "#" { send "exit\n" }
+expect "vyos@" { send "exit\n" }
+expect eof
 EOF
     fi
 }
@@ -64,9 +67,12 @@ EOF
 ########################################################################
 
 if [ "$1" = "load" ]; then
-    # 加载配置文件：文件路径
-    load_boot $2
+    # 加载配置文件 {文件路径}
+    load_boot $2 > ${tmpDir}/boot.log
 else
     # 初始化并启动hios
-    load_init
+    sleep 10
+    rm -rf ${tmpDir}
+    mkdir -p ${tmpDir}
+    load_init > ${tmpDir}/init.log
 fi

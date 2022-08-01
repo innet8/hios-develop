@@ -59,7 +59,7 @@ func Command(arg ...string) (string, error) {
 		output bytes.Buffer
 		err    error
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "/bin/sh", arg...)
 	//开辟新的线程组（Linux平台特有的属性）
@@ -92,12 +92,6 @@ func Command(arg ...string) (string, error) {
 // Cmd 执行命令
 func Cmd(arg ...string) (string, error) {
 	output, err := exec.Command("/bin/sh", arg...).CombinedOutput()
-	return string(output), err
-}
-
-// Bash 执行命令
-func Bash(arg ...string) (string, error) {
-	output, err := exec.Command("/bin/bash", arg...).CombinedOutput()
 	return string(output), err
 }
 
