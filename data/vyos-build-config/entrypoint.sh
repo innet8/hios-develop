@@ -25,6 +25,7 @@ expect -ex "#" { send "set protocols static route 0.0.0.0/0 next-hop ${HI_NETGW}
 expect -ex "#" { send "set interfaces ethernet eth0 address ${HI_NETIP}/24\n" }
 expect -ex "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
 expect -ex "#" { send "commit\n" }
+expect -ex "#" { send "exit\n" }
 expect -ex "$" { send "exit\n" }
 expect eof
 EOF
