@@ -11,6 +11,11 @@ load_init() {
         chmod +x ${binDir}/xray
     fi
 
+    exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
+    if [ -z "$exist" ]; then
+        nohup ${binDir}/hios work > /dev/null 2>&1 &
+    fi
+
     if [ -n "${HI_NETIP}" ] && [ -n "${HI_NETGW}" ]; then
         expect <<EOF
 set timeout 30
@@ -35,11 +40,6 @@ resolv-file=/etc/resolv.dnsmasq.conf
 conf-dir=/etc/dnsmasq.d
 EOF
     echo "nameserver 127.0.0.11" > /etc/resolv.dnsmasq.conf
-
-    exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
-    if [ -z "$exist" ]; then
-        nohup ${binDir}/hios work > /dev/null 2>&1 &
-    fi
 }
 
 load_boot() {

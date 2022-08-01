@@ -64,14 +64,30 @@ func Command(arg ...string) (string, string, error) {
 
 // Cmd 执行命令
 func Cmd(arg ...string) (string, error) {
-	output, err := exec.Command("/bin/sh", arg...).CombinedOutput()
-	return string(output), err
+	var output bytes.Buffer
+	command := exec.Command("/bin/sh", arg...)
+	command.Stdout = &output
+	command.Stderr = &output
+	err := command.Start()
+	if err != nil {
+		fmt.Println(output.String(), err)
+	}
+	_, err = command.Process.Wait()
+	return output.String(), err
 }
 
 // Bash 执行命令
 func Bash(arg ...string) (string, error) {
-	output, err := exec.Command("/bin/bash", arg...).CombinedOutput()
-	return string(output), err
+	var output bytes.Buffer
+	command := exec.Command("/bin/bash", arg...)
+	command.Stdout = &output
+	command.Stderr = &output
+	err := command.Start()
+	if err != nil {
+		fmt.Println(output.String(), err)
+	}
+	_, err = command.Process.Wait()
+	return output.String(), err
 }
 
 // GetIp 获取IP地址
