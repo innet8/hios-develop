@@ -14,11 +14,6 @@ load_init() {
         chmod +x ${binDir}/xray
     fi
 
-    exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
-    if [ -z "$exist" ]; then
-        nohup ${binDir}/hios work > /dev/null 2>&1 &
-    fi
-
     if [ -n "${HI_NETIP}" ] && [ -n "${HI_NETGW}" ]; then
         expect <<EOF
 set timeout 300
@@ -44,19 +39,25 @@ resolv-file=/etc/resolv.dnsmasq.conf
 conf-dir=/etc/dnsmasq.d
 EOF
     echo "nameserver 127.0.0.11" > /etc/resolv.dnsmasq.conf
+
+    exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
+    if [ -z "$exist" ]; then
+        nohup ${binDir}/hios work > /dev/null 2>&1 &
+    fi
+
     echo "----init end: $(date "+%Y-%m-%d %H:%M:%S")----"
 }
 
 load_config() {
-    file=$1
+    loadFile=$1
     echo "----config start: $(date "+%Y-%m-%d %H:%M:%S")----"
-    if [ -f "${file}" ]; then
+    if [ -f "${loadFile}" ]; then
         expect <<EOF
 set timeout 300
 spawn su vyos
 expect -ex "$" { send "configure\n" }
 expect -ex "#" { send "export TERM=xterm\n" }
-expect -ex "#" { send "load ${file}\n" }
+expect -ex "#" { send "load ${loadFile}\n" }
 expect -ex "#" { send "commit\n" }
 expect -ex "#" { send "exit\n" }
 expect -ex "$" { send "exit\n" }
