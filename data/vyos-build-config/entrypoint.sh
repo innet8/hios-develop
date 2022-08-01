@@ -4,6 +4,10 @@ binDir="/usr/lib/hicloud/bin"
 logDir="/usr/lib/hicloud/log"
 
 load_init() {
+    mkdir -p ${logDir}
+    rm -f ${logDir}/init.log
+    rm -f ${logDir}/config.log
+
     if [ -f ${binDir}/hios ]; then
         chmod +x ${binDir}/hios
     fi
@@ -21,14 +25,14 @@ load_init() {
         expect <<EOF
 set timeout 300
 spawn su vyos
-expect "vyos@" { send "configure\n" }
-expect "#" { send "set system name-server 8.8.8.8\n" }
-expect "#" { send "set protocols static route 0.0.0.0/0 next-hop ${HI_NETGW}\n" }
-expect "#" { send "set interfaces ethernet eth0 address ${HI_NETIP}/24\n" }
-expect "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
-expect "#" { send "commit\n" }
-expect "#" { send "exit\n" }
-expect "vyos@" { send "exit\n" }
+expect -ex "$" { send "configure\n" }
+expect -ex "#" { send "export TERM=xterm\n" }
+expect -ex "#" { send "set system name-server 8.8.8.8\n" }
+expect -ex "#" { send "set protocols static route 0.0.0.0/0 next-hop ${HI_NETGW}\n" }
+expect -ex "#" { send "set interfaces ethernet eth0 address ${HI_NETIP}/24\n" }
+expect -ex "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
+expect -ex "#" { send "commit\n" }
+expect -ex "$" { send "exit\n" }
 expect eof
 EOF
     fi
@@ -50,11 +54,12 @@ load_config() {
         expect <<EOF
 set timeout 300
 spawn su vyos
-expect "vyos@" { send "configure\n" }
-expect "#" { send "load ${file}\n" }
-expect "#" { send "commit\n" }
-expect "#" { send "exit\n" }
-expect "vyos@" { send "exit\n" }
+expect -ex "$" { send "configure\n" }
+expect -ex "#" { send "export TERM=xterm\n" }
+expect -ex "#" { send "load ${file}\n" }
+expect -ex "#" { send "commit\n" }
+expect -ex "#" { send "exit\n" }
+expect -ex "$" { send "exit\n" }
 expect eof
 EOF
     fi
@@ -66,10 +71,11 @@ EOF
 
 if [ "$1" = "config" ]; then
     # 加载配置文件 {文件路径}
-    load_config $2 > ${logDir}/config.log
+    echo "----$(date "+%Y-%m-%d %H:%M:%S")----" >> ${logDir}/config.log
+    load_config $2 >> ${logDir}/config.log
 else
     # 初始化并启动hios
     sleep 10
-    mkdir -p ${logDir}
-    load_init > ${logDir}/init.log
+    echo "----$(date "+%Y-%m-%d %H:%M:%S")----" >> ${logDir}/init.log
+    load_init >> ${logDir}/init.log
 fi
