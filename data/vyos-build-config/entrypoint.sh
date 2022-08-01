@@ -26,12 +26,13 @@ expect "#" { send "set protocols static route 0.0.0.0/0 next-hop ${HI_NETGW}\n" 
 expect "#" { send "set interfaces ethernet eth0 address ${HI_NETIP}/24\n" }
 expect "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
 expect "#" { send "commit\n" }
+expect "#" { send "save\n" }
 expect "#" { send "exit\n" } expect eof
 interact
 EOF
     fi
 
-    cat > /etc/dnsmasq.conf <<-EOF
+    cat > /etc/dnsmasq.conf <<EOF
 user=dnsmasq
 all-servers
 cache-size=150
@@ -51,6 +52,7 @@ spawn su vyos
 expect "vyos@" { send "configure\n" }
 expect "#" { send "load ${file}\n" }
 expect "#" { send "commit\n" }
+expect "#" { send "save\n" }
 expect "#" { send "exit\n" } expect eof
 interact
 EOF
