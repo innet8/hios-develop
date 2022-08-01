@@ -3,6 +3,27 @@
 binDir="/usr/lib/hicloud/bin"
 logDir="/usr/lib/hicloud/log"
 
+check_user() {
+    n=1
+    while true; do
+        if id -u vyos >/dev/null 2>&1 ; then
+            if [ "$n" -gt 1 ]; then
+                sleep 3
+            fi
+            break
+        else
+            if [ "$n" -gt 10 ]; then
+                echo "user vyos does not exist, failed exit"
+                exit 2
+            else
+                echo "user vyos does not exist, try again later ${n}"
+                sleep 5
+            fi
+        fi
+        n=$(($n+1))
+    done
+}
+
 load_init() {
     echo "----init start: $(date "+%Y-%m-%d %H:%M:%S")----"
 
@@ -15,6 +36,7 @@ load_init() {
     fi
 
     if [ -n "${HI_NETIP}" ] && [ -n "${HI_NETGW}" ]; then
+        check_user
         expect <<EOF
 set timeout 300
 spawn su vyos
@@ -53,6 +75,7 @@ load_config() {
     loadFile=$1
     echo "----config start: $(date "+%Y-%m-%d %H:%M:%S")----"
     if [ -f "${loadFile}" ]; then
+        check_user
         expect <<EOF
 set timeout 300
 spawn su vyos
