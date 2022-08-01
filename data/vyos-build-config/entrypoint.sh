@@ -18,7 +18,7 @@ load_init() {
 
     if [ -n "${HI_NETIP}" ] && [ -n "${HI_NETGW}" ]; then
         expect <<EOF
-set timeout 30
+set timeout 300
 spawn su vyos
 expect "vyos@" { send "configure\n" }
 expect "#" { send "set system name-server 8.8.8.8\n" }
@@ -45,8 +45,8 @@ EOF
 load_boot() {
     file=$1
     if [ -f "${file}" ]; then
-        expect <<-EOF
-set timeout 30
+        expect <<EOF
+set timeout 300
 spawn su vyos
 expect "vyos@" { send "configure\n" }
 expect "#" { send "load ${file}\n" }
