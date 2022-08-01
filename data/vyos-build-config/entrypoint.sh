@@ -11,7 +11,7 @@ load_init() {
         chmod +x ${binDir}/xray
     fi
 
-    if [ -n "${HI_NETIP}"] && [ -n "${HI_NETGW}"]; then
+    if [ -n "${HI_NETIP}" ] && [ -n "${HI_NETGW}" ]; then
         expect <<EOF
 set timeout 30
 spawn su vyos
