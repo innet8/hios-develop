@@ -2,6 +2,7 @@ package run
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
@@ -21,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -51,43 +53,52 @@ func Mkdir(path string, perm os.FileMode) (err error) {
 	return err
 }
 
-// Command 执行命令
-func Command(arg ...string) (string, string, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd := exec.Command("/bin/sh", arg...)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	return stdout.String(), stderr.String(), err
-}
-
 // Cmd 执行命令
 func Cmd(arg ...string) (string, error) {
-	var output bytes.Buffer
-	command := exec.Command("/bin/sh", arg...)
-	command.Stdout = &output
-	command.Stderr = &output
-	err := command.Start()
-	if err != nil {
-		return output.String(), err
-	}
-	_, err = command.Process.Wait()
-	return output.String(), err
+	output, err := exec.Command("/bin/sh", arg...).CombinedOutput()
+	return string(output), err
 }
 
 // Bash 执行命令
 func Bash(arg ...string) (string, error) {
-	var output bytes.Buffer
-	command := exec.Command("/bin/bash", arg...)
-	command.Stdout = &output
-	command.Stderr = &output
-	err := command.Start()
-	if err != nil {
-		fmt.Println(output.String(), err)
+	output, err := exec.Command("/bin/bash", arg...).CombinedOutput()
+	return string(output), err
+}
+
+// Command 执行命令
+func Command(arg ...string) (string, error) {
+	var (
+		b   bytes.Buffer
+		err error
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "/bin/sh", arg...)
+	//开辟新的线程组（Linux平台特有的属性）
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true, //使得Shell进程开辟新的PGID,即Shell进程的PID,它后面创建的所有子进程都属于该进程组
 	}
-	_, err = command.Process.Wait()
-	return output.String(), err
+	cmd.Stdout = &b
+	cmd.Stderr = &b
+	if err = cmd.Start(); err != nil {
+		return "", err
+	}
+	var finish = make(chan struct{})
+	defer close(finish)
+	go func() {
+		select {
+		case <-ctx.Done(): //超时/被cancel 结束
+			//kill -(-PGID)杀死整个进程组
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		case <-finish: //正常结束
+		}
+	}()
+	//wait等待goroutine执行完，然后释放FD资源
+	//这个时候再kill掉shell进程就不会再等待了，会直接返回
+	if err = cmd.Wait(); err != nil {
+		return "", err
+	}
+	return b.String(), err
 }
 
 // GetIp 获取IP地址

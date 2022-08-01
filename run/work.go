@@ -557,7 +557,7 @@ func updateConfigure(fileName string, againNum int) {
 		var err error
 		go func() {
 			cmd := fmt.Sprintf("%s/entrypoint.sh load %s", binDir, fileName)
-			_, err = Cmd("-c", cmd)
+			_, err = Command("-c", cmd)
 			ch <- 1
 		}()
 		select {
