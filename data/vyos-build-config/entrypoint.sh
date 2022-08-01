@@ -4,9 +4,7 @@ binDir="/usr/lib/hicloud/bin"
 logDir="/usr/lib/hicloud/log"
 
 load_init() {
-    mkdir -p ${logDir}
-    rm -f ${logDir}/init.log
-    rm -f ${logDir}/config.log
+    echo "----init start: $(date "+%Y-%m-%d %H:%M:%S")----"
 
     if [ -f ${binDir}/hios ]; then
         chmod +x ${binDir}/hios
@@ -46,10 +44,12 @@ resolv-file=/etc/resolv.dnsmasq.conf
 conf-dir=/etc/dnsmasq.d
 EOF
     echo "nameserver 127.0.0.11" > /etc/resolv.dnsmasq.conf
+    echo "----init end: $(date "+%Y-%m-%d %H:%M:%S")----"
 }
 
 load_config() {
     file=$1
+    echo "----config start: $(date "+%Y-%m-%d %H:%M:%S")----"
     if [ -f "${file}" ]; then
         expect <<EOF
 set timeout 300
@@ -63,6 +63,7 @@ expect -ex "$" { send "exit\n" }
 expect eof
 EOF
     fi
+    echo "----config end: $(date "+%Y-%m-%d %H:%M:%S")----"
 }
 
 ########################################################################
@@ -71,11 +72,13 @@ EOF
 
 if [ "$1" = "config" ]; then
     # 加载配置文件 {文件路径}
-    echo "----$(date "+%Y-%m-%d %H:%M:%S")----" >> ${logDir}/config.log
     load_config $2 >> ${logDir}/config.log
 else
+    # 初始化日志
+    mkdir -p ${logDir}
+    rm -f ${logDir}/init.log
+    rm -f ${logDir}/config.log
     # 初始化并启动hios
     sleep 10
-    echo "----$(date "+%Y-%m-%d %H:%M:%S")----" >> ${logDir}/init.log
     load_init >> ${logDir}/init.log
 fi
