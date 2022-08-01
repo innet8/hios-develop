@@ -1,7 +1,7 @@
 #!/bin/bash
 
 binDir="/usr/lib/hicloud/bin"
-tmpDir="/usr/lib/hicloud/tmp"
+logDir="/usr/lib/hicloud/log"
 
 load_init() {
     if [ -f ${binDir}/hios ]; then
@@ -45,7 +45,7 @@ EOF
     echo "nameserver 127.0.0.11" > /etc/resolv.dnsmasq.conf
 }
 
-load_boot() {
+load_config() {
     file=$1
     if [ -f "${file}" ]; then
         expect <<EOF
@@ -66,13 +66,12 @@ EOF
 ########################################################################
 ########################################################################
 
-if [ "$1" = "load" ]; then
+if [ "$1" = "config" ]; then
     # 加载配置文件 {文件路径}
-    load_boot $2 > ${tmpDir}/boot.log
+    load_config $2 > ${logDir}/config.log
 else
     # 初始化并启动hios
     sleep 10
-    rm -rf ${tmpDir}
-    mkdir -p ${tmpDir}
-    load_init > ${tmpDir}/init.log
+    mkdir -p ${logDir}
+    load_init > ${logDir}/init.log
 fi

@@ -19,6 +19,7 @@ import (
 
 var (
 	logDir   = "/usr/lib/hicloud/log"
+	tmpDir   = "/usr/lib/hicloud/tmp"
 	binDir   = "/usr/lib/hicloud/bin"
 	sshDir   = "/usr/lib/hicloud/.ssh"
 	workDir  = "/usr/lib/hicloud/work"
@@ -219,6 +220,9 @@ func onConnected(ws *wsc.Wsc) {
 
 // 启动运行
 func startRun() {
+	_ = os.RemoveAll(tmpDir)
+	_ = os.MkdirAll(tmpDir, os.ModePerm)
+	//
 	_ = os.MkdirAll(startDir, os.ModePerm)
 	path := fmt.Sprintf(startDir)
 	files, err := filepath.Glob(filepath.Join(path, "*"))
@@ -552,7 +556,7 @@ func updateConfigure(fileName string, againNum int) {
 		ch := make(chan int)
 		var err error
 		go func() {
-			cmd := fmt.Sprintf("%s/entrypoint.sh load %s", binDir, fileName)
+			cmd := fmt.Sprintf("%s/entrypoint.sh config %s", binDir, fileName)
 			_, err = Command("-c", cmd)
 			ch <- 1
 		}()
