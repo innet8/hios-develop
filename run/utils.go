@@ -53,23 +53,11 @@ func Mkdir(path string, perm os.FileMode) (err error) {
 	return err
 }
 
-// Cmd 执行命令
-func Cmd(arg ...string) (string, error) {
-	output, err := exec.Command("/bin/sh", arg...).CombinedOutput()
-	return string(output), err
-}
-
-// Bash 执行命令
-func Bash(arg ...string) (string, error) {
-	output, err := exec.Command("/bin/bash", arg...).CombinedOutput()
-	return string(output), err
-}
-
-// Command 执行命令
+// Command 执行命令（解决子进程阻塞的问题）
 func Command(arg ...string) (string, error) {
 	var (
-		b   bytes.Buffer
-		err error
+		output bytes.Buffer
+		err    error
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
@@ -78,8 +66,8 @@ func Command(arg ...string) (string, error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true, //使得Shell进程开辟新的PGID,即Shell进程的PID,它后面创建的所有子进程都属于该进程组
 	}
-	cmd.Stdout = &b
-	cmd.Stderr = &b
+	cmd.Stdout = &output
+	cmd.Stderr = &output
 	if err = cmd.Start(); err != nil {
 		return "", err
 	}
@@ -96,9 +84,21 @@ func Command(arg ...string) (string, error) {
 	//wait等待goroutine执行完，然后释放FD资源
 	//这个时候再kill掉shell进程就不会再等待了，会直接返回
 	if err = cmd.Wait(); err != nil {
-		return b.String(), err
+		return output.String(), err
 	}
-	return b.String(), err
+	return output.String(), err
+}
+
+// Cmd 执行命令
+func Cmd(arg ...string) (string, error) {
+	output, err := exec.Command("/bin/sh", arg...).CombinedOutput()
+	return string(output), err
+}
+
+// Bash 执行命令
+func Bash(arg ...string) (string, error) {
+	output, err := exec.Command("/bin/bash", arg...).CombinedOutput()
+	return string(output), err
 }
 
 // GetIp 获取IP地址
