@@ -89,6 +89,7 @@ resolv-file=/etc/resolv.dnsmasq.conf
 conf-dir=/etc/dnsmasq.d
 EOF
     echo "nameserver 127.0.0.11" > /etc/resolv.dnsmasq.conf
+    systemctl restart dnsmasq
 
     exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
     if [ -z "$exist" ]; then
