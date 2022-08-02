@@ -47,9 +47,8 @@ expect -ex "#" { send "set protocols static route 0.0.0.0/0 next-hop ${HI_NETGW}
 expect -ex "#" { send "set interfaces ethernet eth0 address ${HI_NETIP}/24\n" }
 expect -ex "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
 expect -ex "#" { send "commit\n" }
-expect -ex "#" { send "exit\n" }
 expect {
-    -ex "exit discard" { send "commit\n"; exp_continue }
+    -ex "exit discard" { send "sleep 3 && commit\n"; exp_continue }
     -ex "#" { send "exit\n"; exp_continue }
     -ex "$" { send "exit\n" }
 }
@@ -87,9 +86,8 @@ expect -ex "$" { send "configure\n" }
 expect -ex "#" { send "export TERM=xterm\n" }
 expect -ex "#" { send "load ${loadFile}\n" }
 expect -ex "#" { send "commit\n" }
-expect -ex "#" { send "exit\n" }
 expect {
-    -ex "exit discard" { send "commit\n"; exp_continue }
+    -ex "exit discard" { send "sleep 3 && commit\n"; exp_continue }
     -ex "#" { send "exit\n"; exp_continue }
     -ex "$" { send "exit\n" }
 }
