@@ -12,13 +12,8 @@ check_user() {
             fi
             break
         else
-            if [ "$n" -gt 10 ]; then
-                echo "user vyos does not exist, failed exit"
-                exit 2
-            else
-                echo "user vyos does not exist, retry ${n}th in 5s"
-                sleep 5
-            fi
+            echo "user vyos not exist, retry ${n}th in 5s"
+            sleep 5
         fi
         n=$(($n+1))
     done
@@ -56,11 +51,12 @@ expect eof
 EOF
         check_network
         if [ $? -eq 0 ]; then
-            echo "network is unreachable, retry ${n}th in 5s"
+            echo "network unreachable, retry ${n}th in 5s"
             sleep 5
         else
             break
         fi
+        n=$(($n+1))
     done
 }
 
