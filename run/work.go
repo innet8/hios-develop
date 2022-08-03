@@ -67,11 +67,6 @@ type sendModel struct {
 	Data   interface{} `json:"data"`
 }
 
-type pingModel struct {
-	Result string `json:"result"`
-	Source string `json:"source"`
-}
-
 type callModel struct {
 	Callback string `json:"callback"`
 	Output   string `json:"output"`
@@ -282,7 +277,7 @@ func timedTaskB(ws *wsc.Wsc) error {
 	sendMessage := ""
 	if hiMode == "hihub" {
 		// 公网 ping
-		sendErr := pingFileAndSend(ws, fmt.Sprintf("%s/ips", workDir), "")
+		sendErr := pingFileAndSend(ws, fmt.Sprintf("%s/ips", workDir))
 		if sendErr != nil {
 			return sendErr
 		}
@@ -346,7 +341,7 @@ func pingAndPPP() {
 			cost = 9999
 		}
 		// ping值相差≥5时更新cost值
-		if math.Abs(float64(model.Cost-cost)) >= 5 {
+		if cost <= 10 || math.Abs(float64(model.Cost-cost)) >= 5 {
 			model.Cost = cost
 			costMap[ip] = model
 			costContent = fmt.Sprintf("%s\nset protocols ospf interface %s cost %d", costContent, model.Interface, model.Cost)
@@ -363,31 +358,26 @@ func pingAndPPP() {
 		return
 	}
 	_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", costFile))
-	_, err = Command(costFile)
-	if err != nil {
-		logger.Error("Exec cost file error: %s", err)
+	cmdRes, cmdErr := Command(costFile)
+	if cmdErr != nil {
+		logger.Error("Exec cost file error: %s %s", cmdRes, cmdErr)
 	} else {
-		logger.Info("Exec cost file success")
+		logger.Debug("Exec cost file success")
 	}
 }
 
 // ping 文件并发送
-func pingFileAndSend(ws *wsc.Wsc, fileName string, source string) error {
-	originalSource := source
-	if strings.Contains(source, "_") {
-		source = strings.Split(source, "_")[0]
-	}
+func pingFileAndSend(ws *wsc.Wsc, fileName string) error {
 	if !Exists(fileName) {
 		return nil
 	}
 	logger.Debug("Start ping [%s]", fileName)
-	result, err := pingFile(fileName, source)
+	result, err := pingFile(fileName, "")
 	if err != nil {
 		logger.Debug("Ping error [%s]: %s", fileName, err)
 		return nil
 	}
-	pingData := &pingModel{Result: result, Source: originalSource}
-	sendMessage := formatSendMsg("ping", pingData)
+	sendMessage := formatSendMsg("ping", result)
 	return ws.SendTextMessage(sendMessage)
 }
 
@@ -426,7 +416,7 @@ func pingFileMap(path string, source string, timeout int, count int) (map[string
 		} else {
 			resMap[s[0]] = 0
 		}
-		pingMap[s[0]] = pingMap[s[0]]
+		pingMap[s[0]] = resMap[s[0]]
 	}
 	return resMap, nil
 }
@@ -614,7 +604,7 @@ func convertConfigure(config string) string {
 	}
 	pppFile := fmt.Sprintf("%s/pppip", workDir)
 	if len(pppIp) > 0 {
-		WriteFile(pppFile, pppIp)
+		WriteFile(pppFile, strings.TrimSpace(pppIp))
 	} else {
 		_ = os.Remove(pppFile)
 	}

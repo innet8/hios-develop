@@ -61,7 +61,7 @@ func Command(arg ...string) (string, error) {
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "/bin/sh", arg...)
+	cmd := exec.CommandContext(ctx, "/bin/bash", arg...)
 	//开辟新的线程组（Linux平台特有的属性）
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true, //使得Shell进程开辟新的PGID,即Shell进程的PID,它后面创建的所有子进程都属于该进程组
