@@ -38,7 +38,8 @@ var (
 	hostState  *State
 	netIoInNic *NetIoNic
 
-	costMap   = make(map[string]float64)
+	costMap   = make(map[string]costModel)
+	pingMap   = make(map[string]float64)
 	daemonMap = make(map[string]string)
 )
 
@@ -75,6 +76,12 @@ type callModel struct {
 	Callback string `json:"callback"`
 	Output   string `json:"output"`
 	Err      string `json:"err"`
+}
+
+type costModel struct {
+	Interface string
+	Ip        string
+	Cost      int
 }
 
 // WorkStart Work开始
@@ -291,6 +298,10 @@ func timedTaskB(ws *wsc.Wsc) error {
 				}
 			}
 		}
+		// 对端 ping
+		go func() {
+			pingPointToPoint()
+		}()
 		// wg 流量统计 todo
 	} else {
 		// 发送刷新
@@ -326,6 +337,50 @@ func getIpsFiles(dirPath string) []string {
 		}
 	}
 	return files
+}
+
+// ping对端更新cost值
+func pingPointToPoint() {
+	ptpFile := fmt.Sprintf("%s/ptpip", workDir)
+	if !Exists(ptpFile) {
+		return
+	}
+	logger.Debug("Start ping ptp")
+	_, err := pingFile(ptpFile, "")
+	if err != nil {
+		logger.Debug("Ping ptp error: %s", err)
+		return
+	}
+	costContent := ""
+	for ip, model := range costMap {
+		cost := int(math.Ceil(pingMap[ip]))
+		if cost == 0 || cost > 9999 {
+			cost = 9999
+		}
+		// ping值相差≥5时更新cost值
+		if math.Abs(float64(model.Cost-cost)) >= 5 {
+			model.Cost = cost
+			costMap[ip] = model
+			costContent = fmt.Sprintf("%s\nset protocols ospf interface %s cost %d", costContent, model.Interface, model.Cost)
+		}
+	}
+	if len(costContent) == 0 {
+		return
+	}
+	costFile := fmt.Sprintf("%s/cost", binDir)
+	costContent = fmt.Sprintf("#!/bin/vbash\nsource /opt/vyatta/etc/functions/script-template\n%s\ncommit\nexit", costContent)
+	err = ioutil.WriteFile(costFile, []byte(costContent), 0666)
+	if err != nil {
+		logger.Error("Write cost file error: %s", err)
+		return
+	}
+	_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", costFile))
+	_, err = Command(costFile)
+	if err != nil {
+		logger.Error("Exec cost file error: %s", err)
+	} else {
+		logger.Info("Exec cost file success")
+	}
 }
 
 // ping 文件并发送
@@ -373,19 +428,19 @@ func pingFileMap(path string, source string, timeout int, count int) (map[string
 	if errRe != nil {
 		return nil, err
 	}
-	var pingMap = make(map[string]float64)
+	var resMap = make(map[string]float64)
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	for scanner.Scan() {
 		s := spaceRe.Split(scanner.Text(), -1)
 		if len(s) > 9 {
 			float, _ := strconv.ParseFloat(s[9], 64)
-			pingMap[s[0]] = float
+			resMap[s[0]] = float
 		} else {
-			pingMap[s[0]] = 0
+			resMap[s[0]] = 0
 		}
-		costMap[s[0]] = pingMap[s[0]]
+		pingMap[s[0]] = pingMap[s[0]]
 	}
-	return pingMap, nil
+	return resMap, nil
 }
 
 // 处理消息
@@ -548,17 +603,23 @@ func handleMessageCmd(cmd string, addLog bool) (string, error) {
 
 // 转换配置内容
 func convConfigure(config string) string {
+	costMap = make(map[string]costModel)
 	rege, err := regexp.Compile(`//\s*interface\s+(wg\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+cost`)
 	if err == nil {
 		config = rege.ReplaceAllStringFunc(config, func(value string) string {
 			match := rege.FindStringSubmatch(value)
-			cost := int(math.Ceil(costMap[match[2]]))
-			if cost <= 0 {
-				cost = 9999
+			model := costModel{
+				Interface: match[1],
+				Ip:        match[2],
+				Cost:      int(math.Ceil(pingMap[match[2]])),
 			}
+			if model.Cost == 0 || model.Cost > 9999 {
+				model.Cost = 9999
+			}
+			costMap[model.Ip] = model
 			return fmt.Sprintf(`interface %s {
             cost %d
-         }`, match[1], cost) // 注意保留换行缩进
+         }`, model.Interface, model.Cost) // 注意保留换行缩进
 		})
 	}
 	return config
