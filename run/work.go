@@ -286,21 +286,9 @@ func timedTaskB(ws *wsc.Wsc) error {
 		if sendErr != nil {
 			return sendErr
 		}
-		// 专线 ping
-		dirPath := fmt.Sprintf("%s/vpc_ip", workDir)
-		if IsDir(dirPath) {
-			files := getIpsFiles(dirPath)
-			if files != nil {
-				for _, file := range files {
-					go func(file string) {
-						_ = pingFileAndSend(ws, fmt.Sprintf("%s/%s.ips", dirPath, file), file)
-					}(file)
-				}
-			}
-		}
 		// 对端 ping
 		go func() {
-			pingPointToPoint()
+			pingAndPPP()
 		}()
 		// wg 流量统计 todo
 	} else {
@@ -339,16 +327,16 @@ func getIpsFiles(dirPath string) []string {
 	return files
 }
 
-// ping对端更新cost值
-func pingPointToPoint() {
-	ptpFile := fmt.Sprintf("%s/ptpip", workDir)
-	if !Exists(ptpFile) {
+// ping 对端并更新对端cost值
+func pingAndPPP() {
+	pppFile := fmt.Sprintf("%s/pppip", workDir)
+	if !Exists(pppFile) {
 		return
 	}
-	logger.Debug("Start ping ptp")
-	_, err := pingFile(ptpFile, "")
+	logger.Debug("Start ping ppp")
+	_, err := pingFile(pppFile, "")
 	if err != nil {
-		logger.Debug("Ping ptp error: %s", err)
+		logger.Debug("Ping ppp error: %s", err)
 		return
 	}
 	costContent := ""
@@ -522,7 +510,7 @@ func handleMessageFile(fileData fileModel, force bool) {
 	FileMd5.Store(fileKey, contentKey)
 	//
 	if fileData.Type == "configure" {
-		fileContent = convConfigure(fileContent)
+		fileContent = convertConfigure(fileContent)
 	}
 	//
 	var output string
@@ -584,7 +572,7 @@ func handleMessageFile(fileData fileModel, force bool) {
 			daemonStart(program, fileData)
 		}
 	} else if fileData.Type == "configure" {
-		updateConfigure(fileName, 0)
+		loadConfigure(fileName, 0)
 	}
 }
 
@@ -602,7 +590,8 @@ func handleMessageCmd(cmd string, addLog bool) (string, error) {
 }
 
 // 转换配置内容
-func convConfigure(config string) string {
+func convertConfigure(config string) string {
+	pppIp := ""
 	costMap = make(map[string]costModel)
 	rege, err := regexp.Compile(`//\s*interface\s+(wg\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+cost`)
 	if err == nil {
@@ -617,16 +606,23 @@ func convConfigure(config string) string {
 				model.Cost = 9999
 			}
 			costMap[model.Ip] = model
+			pppIp = fmt.Sprintf("%s\n%s", pppIp, model.Ip)
 			return fmt.Sprintf(`interface %s {
             cost %d
          }`, model.Interface, model.Cost) // 注意保留换行缩进
 		})
 	}
+	pppFile := fmt.Sprintf("%s/pppip", workDir)
+	if len(pppIp) > 0 {
+		WriteFile(pppFile, pppIp)
+	} else {
+		_ = os.Remove(pppFile)
+	}
 	return config
 }
 
-// 更新configure
-func updateConfigure(fileName string, againNum int) {
+// 加载configure
+func loadConfigure(fileName string, againNum int) {
 	if configUpdating {
 		logger.Info("Run configure wait: [%s]", fileName)
 		configContinue = fileName
@@ -661,11 +657,11 @@ func updateConfigure(fileName string, againNum int) {
 		configUpdating = false
 		if len(configContinue) > 0 {
 			logger.Info("Run configure continue: [%s]", configContinue)
-			updateConfigure(configContinue, 0)
+			loadConfigure(configContinue, 0)
 		} else if err != nil && againNum < 10 {
 			againNum = againNum + 1
 			logger.Info("Run configure again: [%s] take %d", fileName, againNum)
-			updateConfigure(fileName, againNum)
+			loadConfigure(fileName, againNum)
 		}
 	}()
 }
