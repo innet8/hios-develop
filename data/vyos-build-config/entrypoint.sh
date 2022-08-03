@@ -3,6 +3,19 @@
 binDir="/usr/lib/hicloud/bin"
 logDir="/usr/lib/hicloud/log"
 
+check_ready() {
+    local n=1
+    while true; do
+        if [ -f /tmp/.hicloud_ready ] ; then
+            break
+        else
+            echo "Not ready, retry ${n}th in 5s"
+            sleep 5
+        fi
+        n=$(($n+1))
+    done
+}
+
 check_user() {
     local n=1
     while true; do
@@ -12,7 +25,7 @@ check_user() {
             fi
             break
         else
-            echo "user vyos not exist, retry ${n}th in 5s"
+            echo "User vyos not exist, retry ${n}th in 5s"
             sleep 5
         fi
         n=$(($n+1))
@@ -37,7 +50,7 @@ set timeout 300
 spawn su vyos
 expect -ex "$" { send "configure\n" }
 expect -ex "#" { send "export TERM=xterm\n" }
-expect -ex "#" { send "set system name-server 8.8.8.8\n" }
+expect -ex "#" { send "set system name-server 127.0.0.1\n" }
 expect -ex "#" { send "set protocols static route 0.0.0.0/0 next-hop ${HI_NETGW}\n" }
 expect -ex "#" { send "set interfaces ethernet eth0 address ${HI_NETIP}/24\n" }
 expect -ex "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
@@ -51,7 +64,7 @@ expect eof
 EOF
         check_network
         if [ $? -eq 0 ]; then
-            echo "network unreachable, retry ${n}th in 5s"
+            echo "Network unreachable, retry ${n}th in 5s"
             sleep 5
         else
             break
@@ -60,8 +73,49 @@ EOF
     done
 }
 
+check_iptables() {
+    [ -z "`iptables-legacy -L POSTROUTING -nvt nat | grep " eth0 "`" ] && {
+        iptables-legacy -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+    }
+}
+
+check_dnsmasq() {
+    cat > /etc/dnsmasq.conf <<EOF
+user=dnsmasq
+all-servers
+except-interface=eth0
+cache-size=1000
+clear-on-reload
+resolv-file=/etc/resolv.dnsmasq.conf
+conf-dir=/etc/dnsmasq.d
+EOF
+    cat > /etc/resolv.dnsmasq.conf <<EOF
+nameserver 127.0.0.11
+nameserver 8.8.8.8
+EOF
+    cat > /etc/resolv.conf <<EOF
+nameserver 127.0.0.1
+EOF
+    systemctl restart dnsmasq
+}
+
+check_loader() {
+    local exist
+    local n=1
+    while true; do
+        exist=`ps -ef | grep "vyos-boot-config-loader.py" | grep -v "grep"`
+        if [ -z "$exist" ]; then
+            break
+        else
+            echo "Config loading, retry ${n}th in 5s"
+            sleep 5
+        fi
+        n=$(($n+1))
+    done
+}
+
 load_init() {
-    echo "----init start: $(date "+%Y-%m-%d %H:%M:%S")----"
+    echo "----start: $(date "+%Y-%m-%d %H:%M:%S")----"
 
     if [ -f ${binDir}/hios ]; then
         chmod +x ${binDir}/hios
@@ -71,35 +125,29 @@ load_init() {
         chmod +x ${binDir}/xray
     fi
 
+    check_ready
+
     if [ -n "${HI_URL}" ] && [ -n "${HI_NETIP}" ] && [ -n "${HI_NETGW}" ]; then
         check_user
         check_configure
+        check_dnsmasq
+        check_iptables
     fi
 
-    cat > /etc/dnsmasq.conf <<EOF
-user=dnsmasq
-all-servers
-cache-size=150
-clear-on-reload
-resolv-file=/etc/resolv.dnsmasq.conf
-conf-dir=/etc/dnsmasq.d
-EOF
-    echo "nameserver 127.0.0.11" > /etc/resolv.dnsmasq.conf
-    systemctl restart dnsmasq
-
-    exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
+    local exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
     if [ -z "$exist" ]; then
         nohup ${binDir}/hios work > /dev/null 2>&1 &
     fi
 
-    echo "----init end: $(date "+%Y-%m-%d %H:%M:%S")----"
+    echo "----end: $(date "+%Y-%m-%d %H:%M:%S")----"
 }
 
 load_config() {
     loadFile=$1
-    echo "----config start: $(date "+%Y-%m-%d %H:%M:%S")----"
+    echo "----start: $(date "+%Y-%m-%d %H:%M:%S")----"
     if [ -f "${loadFile}" ]; then
         check_user
+        check_loader
         expect <<EOF
 set timeout 300
 spawn su vyos
@@ -115,7 +163,7 @@ expect {
 expect eof
 EOF
     fi
-    echo "----config end: $(date "+%Y-%m-%d %H:%M:%S")----"
+    echo "----end: $(date "+%Y-%m-%d %H:%M:%S")----"
 }
 
 ########################################################################
@@ -131,6 +179,6 @@ else
     rm -f ${logDir}/init.log
     rm -f ${logDir}/config.log
     # 初始化并启动hios
-    sleep 10
     load_init >> ${logDir}/init.log
 fi
+}
