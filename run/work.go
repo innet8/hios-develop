@@ -9,6 +9,7 @@ import (
 	"github.com/innet8/hios/pkg/xrsa"
 	"github.com/togettoyou/wsc"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -37,6 +38,7 @@ var (
 	hostState  *State
 	netIoInNic *NetIoNic
 
+	costMap   = make(map[string]float64)
 	daemonMap = make(map[string]string)
 )
 
@@ -333,7 +335,6 @@ func pingFileAndSend(ws *wsc.Wsc, fileName string, source string) error {
 		source = strings.Split(source, "_")[0]
 	}
 	if !Exists(fileName) {
-		logger.Debug("File no exist [%s]", fileName)
 		return nil
 	}
 	logger.Debug("Start ping [%s]", fileName)
@@ -382,6 +383,7 @@ func pingFileMap(path string, source string, timeout int, count int) (map[string
 		} else {
 			pingMap[s[0]] = 0
 		}
+		costMap[s[0]] = pingMap[s[0]]
 	}
 	return pingMap, nil
 }
@@ -464,9 +466,12 @@ func handleMessageFile(fileData fileModel, force bool) {
 	}
 	FileMd5.Store(fileKey, contentKey)
 	//
+	if fileData.Type == "configure" {
+		fileContent = convConfigure(fileContent)
+	}
+	//
 	var output string
-	var fileByte = []byte(fileContent)
-	err = ioutil.WriteFile(fileName, fileByte, 0666)
+	err = ioutil.WriteFile(fileName, []byte(fileContent), 0666)
 	if err != nil {
 		logger.Error("WriteFile error: [%s] %s", fileName, err)
 		return
@@ -539,6 +544,24 @@ func handleMessageCmd(cmd string, addLog bool) (string, error) {
 		}
 	}
 	return output, err
+}
+
+// 转换配置内容
+func convConfigure(config string) string {
+	rege, err := regexp.Compile(`//\s*interface\s+(wg\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+cost`)
+	if err == nil {
+		config = rege.ReplaceAllStringFunc(config, func(value string) string {
+			match := rege.FindStringSubmatch(value)
+			cost := int(math.Ceil(costMap[match[2]]))
+			if cost <= 0 {
+				cost = 9999
+			}
+			return fmt.Sprintf(`interface %s {
+            cost %d
+         }`, match[1], cost) // 注意保留换行缩进
+		})
+	}
+	return config
 }
 
 // 更新configure
