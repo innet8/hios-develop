@@ -35,6 +35,7 @@ check_loader() {
         fi
         n=$(($n+1))
     done
+    chown -R root:vyattacfg /opt/vyatta/config/active/ &> /dev/null
 }
 
 check_network() {
