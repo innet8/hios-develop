@@ -19,6 +19,24 @@ check_user() {
     done
 }
 
+check_loader() {
+    local exist
+    local n=1
+    while true; do
+        exist=`ps -ef | grep "vyos-boot-config-loader.py" | grep -v "grep"`
+        if [ -z "$exist" ]; then
+            if [ "$n" -gt 1 ]; then
+                sleep 1
+            fi
+            break
+        else
+            echo "Config loading, retry ${n}th in 5s"
+            sleep 5
+        fi
+        n=$(($n+1))
+    done
+}
+
 check_network() {
     local ret_code=`curl -I -s --connect-timeout 1 -m 5 ${HI_URL} -w %{http_code} | tail -n1`
     if [ "x$ret_code" = "x200" ] || [ "x$ret_code" = "x301" ] || [ "x$ret_code" = "x302" ]; then
@@ -86,21 +104,6 @@ EOF
     systemctl restart dnsmasq
 }
 
-check_loader() {
-    local exist
-    local n=1
-    while true; do
-        exist=`ps -ef | grep "vyos-boot-config-loader.py" | grep -v "grep"`
-        if [ -z "$exist" ]; then
-            break
-        else
-            echo "Config loading, retry ${n}th in 5s"
-            sleep 5
-        fi
-        n=$(($n+1))
-    done
-}
-
 load_init() {
     echo "----start: $(date "+%Y-%m-%d %H:%M:%S")----"
 
@@ -118,11 +121,16 @@ load_init() {
         check_configure
         check_iptables
         check_dnsmasq
-    fi
 
-    local exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
-    if [ -z "$exist" ]; then
-        nohup ${binDir}/hios work > /dev/null 2>&1 &
+        local exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
+        if [ -z "$exist" ]; then
+            echo "Start hios work"
+            nohup ${binDir}/hios work > /dev/null 2>&1 &
+        else
+            echo "Hios not exist"
+        fi
+    else
+        echo "Environment variable error"
     fi
 
     echo "----end: $(date "+%Y-%m-%d %H:%M:%S")----"
