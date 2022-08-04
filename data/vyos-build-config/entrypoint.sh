@@ -168,10 +168,6 @@ if [ "$1" = "config" ]; then
     # 加载配置文件 {文件路径}
     load_config $2 >> ${logDir}/config.log
 else
-    # 初始化日志
-    mkdir -p ${logDir}
-    rm -f ${logDir}/init.log
-    rm -f ${logDir}/config.log
     # 初始化并启动hios
     load_init >> ${logDir}/init.log
 fi

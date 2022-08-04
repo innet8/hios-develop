@@ -296,32 +296,6 @@ func timedTaskB(ws *wsc.Wsc) error {
 	return nil
 }
 
-// 获取目录下的所有ips文件
-func getIpsFiles(dirPath string) []string {
-	dir, err := ioutil.ReadDir(dirPath)
-	if err != nil {
-		return nil
-	}
-	var files []string
-	for _, fi := range dir {
-		if !fi.IsDir() {
-			ok := strings.HasSuffix(fi.Name(), ".ips")
-			if ok {
-				basename := strings.TrimSuffix(fi.Name(), ".ips")
-				if StringToIP(basename) != nil { // xxx.xxx.xxx.xxx.ips
-					files = append(files, basename)
-				} else if strings.Contains(basename, "_") { // xxx.xxx.xxx.xxx(_xx)+.ips
-					ip := strings.Split(basename, "_")[0]
-					if StringToIP(ip) != nil {
-						files = append(files, basename)
-					}
-				}
-			}
-		}
-	}
-	return files
-}
-
 // ping 对端并更新对端cost值
 func pingAndPPP() {
 	pppFile := fmt.Sprintf("%s/pppip", workDir)
@@ -360,9 +334,9 @@ func pingAndPPP() {
 	_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", costFile))
 	cmdRes, cmdErr := Command(costFile)
 	if cmdErr != nil {
-		logger.Error("Exec cost file error: %s %s", cmdRes, cmdErr)
+		logger.Error("Set cost error: %s %s", cmdRes, cmdErr)
 	} else {
-		logger.Debug("Exec cost file success")
+		logger.Debug("Set cost success")
 	}
 }
 
@@ -608,7 +582,7 @@ func convertConfigure(config string) string {
 	} else {
 		_ = os.Remove(pppFile)
 	}
-	return config
+	return fmt.Sprintf("%s\n%s", config, `// vyos-config-version: "bgp@2:broadcast-relay@1:cluster@1:config-management@1:conntrack@3:conntrack-sync@2:dhcp-relay@2:dhcp-server@6:dhcpv6-server@1:dns-forwarding@3:firewall@7:flow-accounting@1:https@3:interfaces@26:ipoe-server@1:ipsec@9:isis@1:l2tp@4:lldp@1:mdns@1:monitoring@1:nat@5:nat66@1:ntp@1:openconnect@2:ospf@1:policy@3:pppoe-server@5:pptp@2:qos@1:quagga@10:rpki@1:salt@1:snmp@2:ssh@2:sstp@4:system@25:vrf@3:vrrp@3:vyos-accel-ppp@2:wanloadbalance@3:webproxy@2"`)
 }
 
 // 加载configure

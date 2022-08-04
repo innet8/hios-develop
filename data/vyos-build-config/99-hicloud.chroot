@@ -5,24 +5,18 @@ echo 'Defaults env_keep += "HI_URL HI_MODE HI_TOKEN HI_CID HI_NETIP HI_NETGW"' >
 
 # 入口执行文件
 cat > /usr/sbin/hicloud <<-EOF
-#!/bin/sh
-echo "start: \$(date "+%Y-%m-%d %H:%M:%S")" > /usr/lib/hicloud/log/start
+#!/bin/bash
 
-mkdir -p /usr/lib/hicloud/log
+binDir="/usr/lib/hicloud/bin"
+logDir="/usr/lib/hicloud/log"
+
+mkdir -p \${logDir}
+echo > \${logDir}/init.log
+echo > \${logDir}/config.log
+echo "start: \$(date "+%Y-%m-%d %H:%M:%S")" > \${logDir}/start.log
+
 ln -s /usr/lib/hicloud / &> /dev/null
-
-chmod +x /usr/lib/hicloud/bin/entrypoint.sh
-nohup /usr/lib/hicloud/bin/entrypoint.sh > /dev/null 2>&1 &
+chmod +x \${binDir}/entrypoint.sh
+nohup \${binDir}/entrypoint.sh > /dev/null 2>&1 &
 EOF
 chmod +x /usr/sbin/hicloud
-
-# 配置启动后
-cat >> /opt/vyatta/etc/config/scripts/vyos-postconfig-bootup.script <<-EOF
-echo "bootup: \$(date "+%Y-%m-%d %H:%M:%S")" >> /usr/lib/hicloud/log/start
-
-if [ -f /usr/lib/hicloud/work/config.boot ]; then
-    echo "bootup work config start: \$(date "+%Y-%m-%d %H:%M:%S")" >> /usr/lib/hicloud/log/start
-    /usr/lib/hicloud/bin/entrypoint.sh config /usr/lib/hicloud/work/config.boot
-    echo "bootup work config end: \$(date "+%Y-%m-%d %H:%M:%S")" >> /usr/lib/hicloud/log/start
-fi
-EOF
