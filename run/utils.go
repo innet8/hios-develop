@@ -290,7 +290,7 @@ func GetNetIoInNic(lastNetIoNic *NetIoNic) *NetIoNic {
 			Name: "all",
 		}
 		for _, nic := range ioStats {
-			if strings.HasSuffix(nic.Name, "wgi_") {
+			if strings.HasSuffix(nic.Name, "wg1") {
 				stat.BytesRecv += nic.BytesRecv
 				stat.PacketsRecv += nic.PacketsRecv
 				stat.Errin += nic.Errin
