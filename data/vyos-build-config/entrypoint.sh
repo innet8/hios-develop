@@ -3,19 +3,6 @@
 binDir="/usr/lib/hicloud/bin"
 logDir="/usr/lib/hicloud/log"
 
-check_ready() {
-    local n=1
-    while true; do
-        if [ -f /tmp/.hicloud_ready ] ; then
-            break
-        else
-            echo "Not ready, retry ${n}th in 5s"
-            sleep 5
-        fi
-        n=$(($n+1))
-    done
-}
-
 check_user() {
     local n=1
     while true; do
@@ -56,7 +43,7 @@ expect -ex "#" { send "set interfaces ethernet eth0 address ${HI_NETIP}/24\n" }
 expect -ex "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
 expect -ex "#" { send "commit\n" }
 expect {
-    -ex "exit discard" { send "sleep 5 && commit\n"; exp_continue }
+    -ex "exit discard" { send "sleep 3 && commit\n"; exp_continue }
     -ex "#" { send "exit\n"; exp_continue }
     -ex "$" { send "exit\n" }
 }
@@ -125,13 +112,12 @@ load_init() {
         chmod +x ${binDir}/xray
     fi
 
-    check_ready
-
     if [ -n "${HI_URL}" ] && [ -n "${HI_NETIP}" ] && [ -n "${HI_NETGW}" ]; then
         check_user
+        check_loader
         check_configure
-        check_dnsmasq
         check_iptables
+        check_dnsmasq
     fi
 
     local exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
@@ -181,4 +167,3 @@ else
     # 初始化并启动hios
     load_init >> ${logDir}/init.log
 fi
-}
