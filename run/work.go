@@ -33,8 +33,6 @@ var (
 
 	connectRand string
 	monitorRand string
-	xrayRand    string
-	dantedRand  string
 
 	configUpdating bool
 	configContinue string
@@ -46,6 +44,8 @@ var (
 	costMap    = make(map[string]*costModel)
 	monitorMap = make(map[string]*monitorModel)
 	pingMap    = make(map[string]float64)
+	dantedMap  = make(map[string]string)
+	xrayMap    = make(map[string]string)
 	daemonMap  = make(map[string]string)
 )
 
@@ -287,7 +287,7 @@ func timedTaskA() error {
 	return nil
 }
 
-// 定时任务B（上报：ping结果、流量统计）
+// 定时任务B（上报：ping、检查xray、流量统计）
 func timedTaskB() error {
 	hiMode := os.Getenv("HI_MODE")
 	sendMessage := ""
@@ -299,8 +299,8 @@ func timedTaskB() error {
 		}
 		// 对端 ping
 		go pingPPP()
-		// 检查删除 xray todo
-		// wg 流量统计 todo
+		// todo 检查删除 xray
+		// todo wg 流量统计
 	} else {
 		// 发送刷新
 		sendMessage = formatSendMsg("refresh", time.Now().Unix())
@@ -668,11 +668,12 @@ func convertConfigure(config string) string {
 
 // 加载danted
 func loadDanted(fileName string, fileData fileModel) {
+	key := StringMd5(fileName)
 	rand := RandString(6)
-	dantedRand = rand
+	dantedMap[key] = rand
 	go func() {
 		for {
-			if rand != dantedRand {
+			if rand != dantedMap[key] {
 				logger.Debug("[danted] jump: '%s'", fileName)
 				break
 			}
@@ -702,11 +703,12 @@ func loadDanted(fileName string, fileData fileModel) {
 
 // 加载xray
 func loadXray(fileName string, fileData fileModel) {
+	key := StringMd5(fileName)
 	rand := RandString(6)
-	xrayRand = rand
+	xrayMap[key] = rand
 	go func() {
 		for {
-			if rand != xrayRand {
+			if rand != xrayMap[key] {
 				logger.Debug("[xray] jump: '%s'", fileName)
 				break
 			}
@@ -831,15 +833,16 @@ func killPsef(value string) {
 
 // 守护进程
 func daemonStart(value string, fileData fileModel) {
-	// 每10秒检测一次
+	key := StringMd5(value)
 	rand := RandString(6)
-	daemonMap[value] = rand
+	daemonMap[key] = rand
 	go func() {
+		// 每10秒检测一次
 		t := time.NewTicker(10 * time.Second)
 		for {
 			select {
 			case <-t.C:
-				if daemonMap[value] != rand {
+				if rand != daemonMap[key] {
 					return
 				}
 				cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep'", value)
