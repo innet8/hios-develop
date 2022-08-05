@@ -576,19 +576,19 @@ func handleMessageMonitorIp(rand string, content string) {
 	fileName := fmt.Sprintf("%s/monitorip_%s.txt", workDir, rand)
 	err := ioutil.WriteFile(fileName, []byte(strings.Join(fileText, "\n")), 0666)
 	if err != nil {
-		logger.Error("[monitor] '%s' write file error: '%s' %s", rand, fileName, err)
+		logger.Error("[monitorip] '%s' write file error: '%s' %s", rand, fileName, err)
 		return
 	}
 	//
 	for {
 		if rand != monitorRand {
 			_ = os.Remove(fileName)
-			logger.Debug("[monitor] '%s' jump thread", rand)
+			logger.Debug("[monitorip] '%s' jump thread", rand)
 			return
 		}
 		result, pingErr := pingFileMap(fileName, "", 2000, 4)
 		if pingErr != nil {
-			logger.Debug("[monitor] '%s' ping error: %s", rand, pingErr)
+			logger.Debug("[monitorip] '%s' ping error: %s", rand, pingErr)
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -616,7 +616,7 @@ func handleMessageMonitorIp(rand string, content string) {
 		if len(report) > 0 {
 			reportValue, jsonErr := json.Marshal(report)
 			if jsonErr != nil {
-				logger.Debug("[monitor] '%s' marshal error: %s", rand, jsonErr)
+				logger.Debug("[monitorip] '%s' marshal error: %s", rand, jsonErr)
 				for ip := range report {
 					delete(monitorMap, ip)
 				}
@@ -624,7 +624,7 @@ func handleMessageMonitorIp(rand string, content string) {
 				sendMessage := formatSendMsg("monitorip", string(reportValue))
 				sendErr := ws.SendTextMessage(sendMessage)
 				if sendErr != nil {
-					logger.Debug("[monitor] '%s' send error: %s", rand, sendErr)
+					logger.Debug("[monitorip] '%s' send error: %s", rand, sendErr)
 					for ip := range report {
 						delete(monitorMap, ip)
 					}
