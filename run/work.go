@@ -485,13 +485,22 @@ func handleMessageFile(fileData fileModel, force bool) {
 		return
 	}
 	if fileData.Type == "exec" {
-		logger.Info("Exec file start: [%s]", fileName)
+		logger.Info("Exec sh file start: [%s]", fileName)
 		_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", fileName))
 		output, err = Cmd(fileName)
 		if err != nil {
-			logger.Error("Exec file error: [%s] %s %s", fileName, err, output)
+			logger.Error("Exec sh file error: [%s] %s %s", fileName, err, output)
 		} else {
-			logger.Info("Exec file success: [%s]", fileName)
+			logger.Info("Exec sh file success: [%s]", fileName)
+		}
+	} else if fileData.Type == "bash" {
+		logger.Info("Exec bash file start: [%s]", fileName)
+		_, _ = Bash("-c", fmt.Sprintf("chmod +x %s", fileName))
+		output, err = Bash(fileName)
+		if err != nil {
+			logger.Error("Exec bash file error: [%s] %s %s", fileName, err, output)
+		} else {
+			logger.Info("Exec bash file success: [%s]", fileName)
 		}
 	} else if fileData.Type == "yml" {
 		logger.Info("Run yml start: [%s]", fileName)
