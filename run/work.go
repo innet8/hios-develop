@@ -670,6 +670,7 @@ func daemonStart(value string, fileData fileModel) {
 				cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep'", value)
 				output, _ := Cmd("-c", cmd)
 				if len(output) == 0 {
+					logger.Error("Daemon lose: [%s]", value)
 					handleMessageFile(fileData, true)
 					return
 				}
