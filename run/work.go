@@ -10,6 +10,7 @@ import (
 	"github.com/togettoyou/wsc"
 	"io/ioutil"
 	"math"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,6 +32,7 @@ var (
 	nodePrivate  string
 
 	connectRand string
+	monitorRand string
 
 	configUpdating bool
 	configContinue string
@@ -46,9 +48,10 @@ var (
 )
 
 type msgModel struct {
-	Type string    `json:"type"`
-	File fileModel `json:"file"`
-	Cmd  cmdModel  `json:"cmd"`
+	Type    string    `json:"type"`
+	Content string    `json:"content"`
+	File    fileModel `json:"file"`
+	Cmd     cmdModel  `json:"cmd"`
 }
 
 type fileModel struct {
@@ -188,8 +191,8 @@ func WorkStart() {
 // 连接成功
 func onConnected() {
 	connectRand = RandString(6)
-	// 每10秒任务
 	go func() {
+		// 每10秒任务
 		r := connectRand
 		t := time.NewTicker(10 * time.Second)
 		for {
@@ -208,8 +211,8 @@ func onConnected() {
 			}
 		}
 	}()
-	// 每50秒任务
 	go func() {
+		// 每50秒任务
 		r := connectRand
 		t := time.NewTicker(50 * time.Second)
 		for {
@@ -228,11 +231,6 @@ func onConnected() {
 			}
 		}
 	}()
-	// 对端任务
-	hiMode := os.Getenv("HI_MODE")
-	if hiMode == "hihub" {
-		go pppMonitorCost(connectRand)
-	}
 }
 
 // 启动运行
@@ -294,6 +292,8 @@ func timedTaskB() error {
 		if sendErr != nil {
 			return sendErr
 		}
+		// 对端 ping
+		go pingPPP()
 		// 检查删除 xray todo
 		// wg 流量统计 todo
 	} else {
@@ -306,106 +306,57 @@ func timedTaskB() error {
 	return nil
 }
 
-// ping对端、上报对端情况、更新对端cost值
-func pppMonitorCost(rand string) {
-	for {
-		if rand != connectRand {
-			logger.Debug("[PPP] jump [%s]", rand)
-			return
+// ping 对端并更新对端cost值
+func pingPPP() {
+	pppFile := fmt.Sprintf("%s/pppip", workDir)
+	if !Exists(pppFile) {
+		return
+	}
+	logger.Debug("Start ping ppp")
+	_, err := pingFile(pppFile, "")
+	if err != nil {
+		logger.Debug("Ping ppp error: %s", err)
+		return
+	}
+	costContent := ""
+	for ip, model := range costMap {
+		cost := int(math.Ceil(pingMap[ip]))
+		if cost == 0 || cost > 9999 {
+			cost = 9999
 		}
-		pppFile := fmt.Sprintf("%s/pppip", workDir)
-		if !Exists(pppFile) {
-			time.Sleep(2 * time.Second)
-			continue
+		diff := math.Abs(float64(model.Cost - cost))
+		update := false
+		if cost <= 10 {
+			update = diff >= 2 // ping值相差≥2
+		} else if cost <= 100 {
+			update = diff >= 5 // ping值相差≥5
+		} else if cost <= 200 {
+			update = diff >= 10 // ping值相差≥10
+		} else {
+			update = diff >= 20 // ping值相差≥20
 		}
-		result, err := pingFileMap(pppFile, "", 2000, 4)
-		if err != nil {
-			logger.Debug("[PPP] ping error: %s", err)
-			time.Sleep(2 * time.Second)
-			continue
+		if update {
+			model.Cost = cost
+			costMap[ip] = model
+			costContent = fmt.Sprintf("%s\nset protocols ospf interface %s cost %d", costContent, model.Interface, model.Cost)
 		}
-
-		// monitor
-		var state string
-		var record *monitorModel
-		var report = make(map[string]*monitorModel)
-		var unix = time.Now().Unix()
-		for ip, ping := range result {
-			state = "reject"
-			if ping > 0 {
-				state = "accept" // ping值大于0表示线路通
-			}
-			record = monitorMap[ip]
-			/**
-			1、记录没有
-			2、状态改变（通 不通 发生改变
-			3、大于10分钟
-			4、大于10秒钟且（与上次ping值相差大于等于50或与上次相差1.1倍）
-			*/
-			if record == nil || record.State != state || unix-record.Unix >= 600 || (unix-record.Unix >= 10 && computePing(record.Ping, ping)) {
-				report[ip] = &monitorModel{State: state, Ping: ping, Unix: unix}
-				monitorMap[ip] = report[ip]
-			}
-		}
-		if len(report) > 0 {
-			reportValue, jsonErr := json.Marshal(report)
-			if jsonErr != nil {
-				logger.Debug("[MonitorIp] marshal error: %s", jsonErr)
-				for ip := range report {
-					delete(monitorMap, ip)
-				}
-			} else {
-				sendMessage := formatSendMsg("monitorip", string(reportValue))
-				sendErr := ws.SendTextMessage(sendMessage)
-				if sendErr != nil {
-					logger.Debug("[MonitorIp] send error: %s", sendErr)
-					for ip := range report {
-						delete(monitorMap, ip)
-					}
-				}
-			}
-		}
-
-		// cost
-		if len(costMap) > 0 {
-			costContent := ""
-			for ip, model := range costMap {
-				cost := int(math.Ceil(pingMap[ip]))
-				if cost == 0 || cost > 9999 {
-					cost = 9999
-				}
-				diff := math.Abs(float64(model.Cost - cost))
-				update := false
-				if cost <= 10 {
-					update = diff >= 2 // ping值相差≥2
-				} else if cost <= 100 {
-					update = diff >= 5 // ping值相差≥5
-				} else if cost <= 200 {
-					update = diff >= 10 // ping值相差≥10
-				} else {
-					update = diff >= 20 // ping值相差≥20
-				}
-				if update {
-					model.Cost = cost
-					costMap[ip] = model
-					costContent = fmt.Sprintf("%s\nset protocols ospf interface %s cost %d", costContent, model.Interface, model.Cost)
-				}
-			}
-			if len(costContent) > 0 {
-				costFile := fmt.Sprintf("%s/cost", binDir)
-				costContent = fmt.Sprintf("#!/bin/vbash\nsource /opt/vyatta/etc/functions/script-template\n%s\ncommit\nexit", costContent)
-				err = ioutil.WriteFile(costFile, []byte(costContent), 0666)
-				if err != nil {
-					logger.Debug("[Cost] write file error: %s", err)
-				} else {
-					_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", costFile))
-					costRes, costErr := Command(costFile)
-					if costErr != nil {
-						logger.Debug("[Cost] setting error: %s %s", costRes, costErr)
-					}
-				}
-			}
-		}
+	}
+	if len(costContent) == 0 {
+		return
+	}
+	costFile := fmt.Sprintf("%s/cost", binDir)
+	costContent = fmt.Sprintf("#!/bin/vbash\nsource /opt/vyatta/etc/functions/script-template\n%s\ncommit\nexit", costContent)
+	err = ioutil.WriteFile(costFile, []byte(costContent), 0666)
+	if err != nil {
+		logger.Error("Write cost file error: %s", err)
+		return
+	}
+	_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", costFile))
+	cmdRes, cmdErr := Command(costFile)
+	if cmdErr != nil {
+		logger.Error("Set cost error: %s %s", cmdRes, cmdErr)
+	} else {
+		logger.Debug("Set cost success")
 	}
 }
 
@@ -489,6 +440,10 @@ func handleMessageReceived(message string) {
 					logger.Debug("Send cmd callback error: %s", err)
 				}
 			}
+		} else if data.Type == "monitorip" {
+			// 监听ip状态
+			monitorRand = RandString(6)
+			go handleMessageMonitorIp(monitorRand, data.Content)
 		}
 	}
 }
@@ -614,6 +569,86 @@ func handleMessageCmd(cmd string, addLog bool) (string, error) {
 		}
 	}
 	return output, err
+}
+
+// 监听ip通或不通上报（ping值变化超过5也上报）
+func handleMessageMonitorIp(rand string, content string) {
+	var fileText []string
+	array := strings.Split(content, ",")
+	for _, value := range array {
+		arr := strings.Split(value, ":")
+		address := net.ParseIP(arr[0])
+		if address == nil {
+			continue
+		}
+		ip := address.String()
+		if len(arr) >= 4 {
+			state := arr[1]
+			ping, _ := strconv.ParseFloat(arr[2], 64)
+			unix, _ := strconv.ParseInt(arr[3], 10, 64)
+			monitorMap[ip] = &monitorModel{State: state, Ping: ping, Unix: unix}
+		}
+		fileText = append(fileText, ip)
+	}
+	fileName := fmt.Sprintf("%s/monitorip_%s.txt", workDir, rand)
+	err := ioutil.WriteFile(fileName, []byte(strings.Join(fileText, "\n")), 0666)
+	if err != nil {
+		logger.Error("[MonitorIp] [%s] WriteFile error: [%s] %s", rand, fileName, err)
+		return
+	}
+	//
+	for {
+		if rand != monitorRand {
+			_ = os.Remove(fileName)
+			logger.Debug("[MonitorIp] [%s] Jump thread", rand)
+			return
+		}
+		result, pingErr := pingFileMap(fileName, "", 2000, 4)
+		if pingErr != nil {
+			logger.Debug("[MonitorIp] [%s] Ping error: %s", rand, pingErr)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		var state string
+		var record *monitorModel
+		var report = make(map[string]*monitorModel)
+		var unix = time.Now().Unix()
+		for ip, ping := range result {
+			state = "reject"
+			if ping > 0 {
+				state = "accept" // ping值大于0表示线路通
+			}
+			record = monitorMap[ip]
+			/**
+			1、记录没有
+			2、状态改变（通 不通 发生改变）
+			3、大于10分钟
+			4、大于10秒钟且（与上次ping值相差大于等于50或与上次相差1.1倍）
+			*/
+			if record == nil || record.State != state || unix-record.Unix >= 600 || (unix-record.Unix >= 10 && computePing(record.Ping, ping)) {
+				report[ip] = &monitorModel{State: state, Ping: ping, Unix: unix}
+				monitorMap[ip] = report[ip]
+			}
+		}
+		if len(report) > 0 {
+			reportValue, jsonErr := json.Marshal(report)
+			if jsonErr != nil {
+				logger.Debug("[MonitorIp] [%s] Marshal error: %s", rand, jsonErr)
+				for ip := range report {
+					delete(monitorMap, ip)
+				}
+			} else {
+				sendMessage := formatSendMsg("monitorip", string(reportValue))
+				sendErr := ws.SendTextMessage(sendMessage)
+				if sendErr != nil {
+					logger.Debug("[MonitorIp] [%s] Send error: %s", rand, sendErr)
+					for ip := range report {
+						delete(monitorMap, ip)
+					}
+				}
+			}
+		}
+	}
 }
 
 // 转换配置内容
