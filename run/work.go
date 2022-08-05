@@ -35,12 +35,14 @@ var (
 	configUpdating bool
 	configContinue string
 
+	ws         *wsc.Wsc
 	hostState  *State
 	netIoInNic *NetIoNic
 
-	costMap   = make(map[string]costModel)
-	pingMap   = make(map[string]float64)
-	daemonMap = make(map[string]string)
+	costMap    = make(map[string]*costModel)
+	monitorMap = make(map[string]*monitorModel)
+	pingMap    = make(map[string]float64)
+	daemonMap  = make(map[string]string)
 )
 
 type msgModel struct {
@@ -79,6 +81,12 @@ type costModel struct {
 	Cost      int
 }
 
+type monitorModel struct {
+	State string
+	Ping  float64
+	Unix  int64
+}
+
 // WorkStart Work开始
 func WorkStart() {
 	if !Exists(fmt.Sprintf("%s/server_public", sshDir)) {
@@ -115,7 +123,7 @@ func WorkStart() {
 	startRun()
 	//
 	done := make(chan bool)
-	ws := wsc.New(wsUrl)
+	ws = wsc.New(wsUrl)
 	// 自定义配置
 	ws.SetConfig(&wsc.Config{
 		WriteWait:         10 * time.Second,
@@ -129,7 +137,7 @@ func WorkStart() {
 	ws.OnConnected(func() {
 		logger.Debug("OnConnected: ", ws.WebSocket.Url)
 		logger.SetWebsocket(ws)
-		onConnected(ws)
+		onConnected()
 	})
 	ws.OnConnectError(func(err error) {
 		logger.Debug("OnConnectError: ", err.Error())
@@ -162,7 +170,7 @@ func WorkStart() {
 		if strings.HasPrefix(message, "r:") {
 			message = xrsa.Decrypt(message[2:], nodePublic, nodePrivate)
 		}
-		handleMessageReceived(ws, message)
+		handleMessageReceived(message)
 	})
 	ws.OnBinaryMessageReceived(func(data []byte) {
 		logger.Debug("OnBinaryMessageReceived: ", string(data))
@@ -178,10 +186,10 @@ func WorkStart() {
 }
 
 // 连接成功
-func onConnected(ws *wsc.Wsc) {
+func onConnected() {
 	connectRand = RandString(6)
+	// 每10秒任务
 	go func() {
-		// 每10秒任务
 		r := connectRand
 		t := time.NewTicker(10 * time.Second)
 		for {
@@ -190,7 +198,7 @@ func onConnected(ws *wsc.Wsc) {
 				if r != connectRand {
 					return
 				}
-				err := timedTaskA(ws)
+				err := timedTaskA()
 				if err != nil {
 					logger.Debug("TimedTaskA: %s", err)
 				}
@@ -200,8 +208,8 @@ func onConnected(ws *wsc.Wsc) {
 			}
 		}
 	}()
+	// 每50秒任务
 	go func() {
-		// 每50秒任务
 		r := connectRand
 		t := time.NewTicker(50 * time.Second)
 		for {
@@ -210,7 +218,7 @@ func onConnected(ws *wsc.Wsc) {
 				if r != connectRand {
 					return
 				}
-				err := timedTaskB(ws)
+				err := timedTaskB()
 				if err != nil {
 					logger.Debug("TimedTaskB: %s", err)
 				}
@@ -220,6 +228,11 @@ func onConnected(ws *wsc.Wsc) {
 			}
 		}
 	}()
+	// 对端任务
+	hiMode := os.Getenv("HI_MODE")
+	if hiMode == "hihub" {
+		go pppMonitorCost(connectRand)
+	}
 }
 
 // 启动运行
@@ -241,7 +254,7 @@ func startRun() {
 }
 
 // 定时任务A（上报：系统状态、入口网速）
-func timedTaskA(ws *wsc.Wsc) error {
+func timedTaskA() error {
 	hiMode := os.Getenv("HI_MODE")
 	sendMessage := ""
 	if hiMode == "host" {
@@ -272,19 +285,15 @@ func timedTaskA(ws *wsc.Wsc) error {
 }
 
 // 定时任务B（上报：ping结果、流量统计）
-func timedTaskB(ws *wsc.Wsc) error {
+func timedTaskB() error {
 	hiMode := os.Getenv("HI_MODE")
 	sendMessage := ""
 	if hiMode == "hihub" {
 		// 公网 ping
-		sendErr := pingFileAndSend(ws, fmt.Sprintf("%s/ips", workDir))
+		sendErr := pingSend(fmt.Sprintf("%s/ips", workDir))
 		if sendErr != nil {
 			return sendErr
 		}
-		// 对端 ping
-		go func() {
-			pingAndPPP()
-		}()
 		// 检查删除 xray todo
 		// wg 流量统计 todo
 	} else {
@@ -297,52 +306,111 @@ func timedTaskB(ws *wsc.Wsc) error {
 	return nil
 }
 
-// ping 对端并更新对端cost值
-func pingAndPPP() {
-	pppFile := fmt.Sprintf("%s/pppip", workDir)
-	if !Exists(pppFile) {
-		return
-	}
-	logger.Debug("Start ping ppp")
-	_, err := pingFile(pppFile, "")
-	if err != nil {
-		logger.Debug("Ping ppp error: %s", err)
-		return
-	}
-	costContent := ""
-	for ip, model := range costMap {
-		cost := int(math.Ceil(pingMap[ip]))
-		if cost == 0 || cost > 9999 {
-			cost = 9999
+// ping对端、上报对端情况、更新对端cost值
+func pppMonitorCost(rand string) {
+	for {
+		if rand != connectRand {
+			logger.Debug("[PPP] jump [%s]", rand)
+			return
 		}
-		// ping值相差≥5时更新cost值
-		if cost <= 10 || math.Abs(float64(model.Cost-cost)) >= 5 {
-			model.Cost = cost
-			costMap[ip] = model
-			costContent = fmt.Sprintf("%s\nset protocols ospf interface %s cost %d", costContent, model.Interface, model.Cost)
+		pppFile := fmt.Sprintf("%s/pppip", workDir)
+		if !Exists(pppFile) {
+			time.Sleep(2 * time.Second)
+			continue
 		}
-	}
-	if len(costContent) == 0 {
-		return
-	}
-	costFile := fmt.Sprintf("%s/cost", binDir)
-	costContent = fmt.Sprintf("#!/bin/vbash\nsource /opt/vyatta/etc/functions/script-template\n%s\ncommit\nexit", costContent)
-	err = ioutil.WriteFile(costFile, []byte(costContent), 0666)
-	if err != nil {
-		logger.Error("Write cost file error: %s", err)
-		return
-	}
-	_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", costFile))
-	cmdRes, cmdErr := Command(costFile)
-	if cmdErr != nil {
-		logger.Error("Set cost error: %s %s", cmdRes, cmdErr)
-	} else {
-		logger.Debug("Set cost success")
+		result, err := pingFileMap(pppFile, "", 2000, 4)
+		if err != nil {
+			logger.Debug("[PPP] ping error: %s", err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		// monitor
+		var state string
+		var record *monitorModel
+		var report = make(map[string]*monitorModel)
+		var unix = time.Now().Unix()
+		for ip, ping := range result {
+			state = "reject"
+			if ping > 0 {
+				state = "accept" // ping值大于0表示线路通
+			}
+			record = monitorMap[ip]
+			/**
+			1、记录没有
+			2、状态改变（通 不通 发生改变
+			3、大于10分钟
+			4、大于10秒钟且（与上次ping值相差大于等于50或与上次相差1.1倍）
+			*/
+			if record == nil || record.State != state || unix-record.Unix >= 600 || (unix-record.Unix >= 10 && computePing(record.Ping, ping)) {
+				report[ip] = &monitorModel{State: state, Ping: ping, Unix: unix}
+				monitorMap[ip] = report[ip]
+			}
+		}
+		if len(report) > 0 {
+			reportValue, jsonErr := json.Marshal(report)
+			if jsonErr != nil {
+				logger.Debug("[MonitorIp] marshal error: %s", jsonErr)
+				for ip := range report {
+					delete(monitorMap, ip)
+				}
+			} else {
+				sendMessage := formatSendMsg("monitorip", string(reportValue))
+				sendErr := ws.SendTextMessage(sendMessage)
+				if sendErr != nil {
+					logger.Debug("[MonitorIp] send error: %s", sendErr)
+					for ip := range report {
+						delete(monitorMap, ip)
+					}
+				}
+			}
+		}
+
+		// cost
+		if len(costMap) > 0 {
+			costContent := ""
+			for ip, model := range costMap {
+				cost := int(math.Ceil(pingMap[ip]))
+				if cost == 0 || cost > 9999 {
+					cost = 9999
+				}
+				diff := math.Abs(float64(model.Cost - cost))
+				update := false
+				if cost <= 10 {
+					update = diff >= 2 // ping值相差≥2
+				} else if cost <= 100 {
+					update = diff >= 5 // ping值相差≥5
+				} else if cost <= 200 {
+					update = diff >= 10 // ping值相差≥10
+				} else {
+					update = diff >= 20 // ping值相差≥20
+				}
+				if update {
+					model.Cost = cost
+					costMap[ip] = model
+					costContent = fmt.Sprintf("%s\nset protocols ospf interface %s cost %d", costContent, model.Interface, model.Cost)
+				}
+			}
+			if len(costContent) > 0 {
+				costFile := fmt.Sprintf("%s/cost", binDir)
+				costContent = fmt.Sprintf("#!/bin/vbash\nsource /opt/vyatta/etc/functions/script-template\n%s\ncommit\nexit", costContent)
+				err = ioutil.WriteFile(costFile, []byte(costContent), 0666)
+				if err != nil {
+					logger.Debug("[Cost] write file error: %s", err)
+				} else {
+					_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", costFile))
+					costRes, costErr := Command(costFile)
+					if costErr != nil {
+						logger.Debug("[Cost] setting error: %s %s", costRes, costErr)
+					}
+				}
+			}
+		}
 	}
 }
 
 // ping 文件并发送
-func pingFileAndSend(ws *wsc.Wsc, fileName string) error {
+func pingSend(fileName string) error {
 	if !Exists(fileName) {
 		return nil
 	}
@@ -397,7 +465,7 @@ func pingFileMap(path string, source string, timeout int, count int) (map[string
 }
 
 // 处理消息
-func handleMessageReceived(ws *wsc.Wsc, message string) {
+func handleMessageReceived(message string) {
 	var data msgModel
 	if ok := json.Unmarshal([]byte(message), &data); ok == nil {
 		if data.Type == "file" {
@@ -422,21 +490,6 @@ func handleMessageReceived(ws *wsc.Wsc, message string) {
 				}
 			}
 		}
-	}
-}
-
-// 格式化要发送的消息
-func formatSendMsg(action string, data interface{}) string {
-	sendData := &sendModel{Type: "node", Action: action, Data: data}
-	sendRes, sendErr := json.Marshal(sendData)
-	if sendErr != nil {
-		return ""
-	}
-	msg := string(sendRes)
-	if len(serverPublic) > 0 {
-		return fmt.Sprintf("r:%s", xrsa.Encrypt(msg, serverPublic))
-	} else {
-		return msg
 	}
 }
 
@@ -566,12 +619,12 @@ func handleMessageCmd(cmd string, addLog bool) (string, error) {
 // 转换配置内容
 func convertConfigure(config string) string {
 	pppIp := ""
-	costMap = make(map[string]costModel)
+	costMap = make(map[string]*costModel)
 	rege, err := regexp.Compile(`//\s*interface\s+(wg\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+cost`)
 	if err == nil {
 		config = rege.ReplaceAllStringFunc(config, func(value string) string {
 			match := rege.FindStringSubmatch(value)
-			model := costModel{
+			model := &costModel{
 				Interface: match[1],
 				Ip:        match[2],
 				Cost:      int(math.Ceil(pingMap[match[2]])),
@@ -638,6 +691,42 @@ func loadConfigure(fileName string, againNum int) {
 			loadConfigure(fileName, againNum)
 		}
 	}()
+}
+
+// 格式化要发送的消息
+func formatSendMsg(action string, data interface{}) string {
+	sendData := &sendModel{Type: "node", Action: action, Data: data}
+	sendRes, sendErr := json.Marshal(sendData)
+	if sendErr != nil {
+		return ""
+	}
+	msg := string(sendRes)
+	if len(serverPublic) > 0 {
+		return fmt.Sprintf("r:%s", xrsa.Encrypt(msg, serverPublic))
+	} else {
+		return msg
+	}
+}
+
+// 计算对比ping值
+func computePing(var1, var2 float64) bool {
+	diff := math.Abs(var1 - var2)
+	if diff < 5 {
+		return false
+	}
+	if diff >= 50 {
+		return true
+	}
+	var multiple float64
+	if var1 > var2 {
+		multiple = var1 / var2
+	} else {
+		multiple = var2 / var1
+	}
+	if multiple < 1.1 {
+		return false
+	}
+	return true
 }
 
 // 杀死根据 ps -ef 查出来的
