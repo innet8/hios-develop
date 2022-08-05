@@ -285,6 +285,7 @@ func timedTaskB(ws *wsc.Wsc) error {
 		go func() {
 			pingAndPPP()
 		}()
+		// 检查删除 xray todo
 		// wg 流量统计 todo
 	} else {
 		// 发送刷新
