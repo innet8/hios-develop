@@ -300,6 +300,7 @@ func timedTaskB() error {
 		// 对端 ping
 		go pingPPP()
 		// todo 检查删除 xray
+		// todo 检查删除 shunt
 		// todo wg 流量统计
 	} else {
 		// 发送刷新
