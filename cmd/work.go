@@ -7,7 +7,7 @@ import (
 	"github.com/innet8/hios/run"
 )
 
-// workCmd represents the websocket command
+// workCmd represents the work command
 var workCmd = &cobra.Command{
 	Use:   "work",
 	Short: "Work",
