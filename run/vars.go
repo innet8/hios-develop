@@ -1,9 +1,17 @@
 package run
 
 import (
+	"github.com/innet8/hios/pkg/sshcmd/sshutil"
 	"sync"
 	"time"
 )
+
+type ExecJson struct {
+	Ip        string
+	Cmd       string
+	Url       string
+	SSHConfig sshutil.SSH
+}
 
 type RsaJson struct {
 	Public  string
@@ -48,6 +56,7 @@ type NetIoNic struct {
 }
 
 var (
-	RsaConf RsaJson
-	FileMd5 sync.Map
+	ExecConf ExecJson
+	RsaConf  RsaJson
+	FileMd5  sync.Map
 )
