@@ -38,6 +38,15 @@ func StringToIP(i string) net.IP {
 	return net.ParseIP(i).To4()
 }
 
+// GetIpAndPort 返回ip、端口
+func GetIpAndPort(ip string) (string, string) {
+	if strings.Contains(ip, ":") {
+		arr := strings.Split(ip, ":")
+		return arr[0], arr[1]
+	}
+	return ip, "22"
+}
+
 // Mkdir 创建目录
 func Mkdir(path string, perm os.FileMode) (err error) {
 	if _, err = os.Stat(path); os.IsNotExist(err) {

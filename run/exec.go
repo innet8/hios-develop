@@ -13,17 +13,18 @@ func ExecStart() {
 	logger.Info("---------- exec start ----------")
 	status := "success"
 	error_ := ""
-	cmdErr := ExecConf.SSHConfig.CmdAsync(ExecConf.Ip, ExecConf.Cmd)
+	cmdErr := ExecConf.SSHConfig.CmdAsync(ExecConf.Host, ExecConf.Cmd)
 	if cmdErr != nil {
 		status = "error"
 		error_ = cmdErr.Error()
 	}
 	if strings.HasPrefix(ExecConf.Url, "http://") || strings.HasPrefix(ExecConf.Url, "https://") {
 		logger.Info("---------- callback start ----------")
+		ip, _ := GetIpAndPort(ExecConf.Host)
 		timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 		_, err := gohttp.NewRequest().
 			FormData(map[string]string{
-				"ip":        ExecConf.Ip,
+				"ip":        ip,
 				"status":    status,
 				"error":     error_,
 				"timestamp": timestamp,

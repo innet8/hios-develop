@@ -7,7 +7,7 @@ import (
 )
 
 type ExecJson struct {
-	Ip        string
+	Host      string
 	Cmd       string
 	Url       string
 	SSHConfig sshutil.SSH
