@@ -457,13 +457,10 @@ func handleMessageReceived(message string) {
 // 保存文件或运行文件
 func handleMessageFile(fileData fileModel, force bool) {
 	var err error
-	fileName := ""
-	if strings.HasPrefix(fileData.Path, "/") {
-		fileName = fileData.Path
-	} else {
-		fileName = fmt.Sprintf("%s/%s", workDir, fileData.Path)
+	if !strings.HasPrefix(fileData.Path, "/") {
+		fileData.Path = fmt.Sprintf("%s/%s", workDir, fileData.Path)
 	}
-	fileDir := filepath.Dir(fileName)
+	fileDir := filepath.Dir(fileData.Path)
 	if !Exists(fileDir) {
 		err = os.MkdirAll(fileDir, os.ModePerm)
 		if err != nil {
@@ -473,16 +470,16 @@ func handleMessageFile(fileData fileModel, force bool) {
 	}
 	fileContent := fileData.Content
 	if fileContent == "" {
-		logger.Warn("[file] empty: %s", fileName)
+		logger.Warn("[file] empty: %s", fileData.Path)
 		return
 	}
 	//
-	fileKey := StringMd5(fileName)
+	fileKey := StringMd5(fileData.Path)
 	contentKey := StringMd5(fileContent)
 	if !force {
 		md5Value, _ := FileMd5.Load(fileKey)
 		if md5Value != nil && md5Value.(string) == contentKey {
-			logger.Debug("[file] same: %s", fileName)
+			logger.Debug("[file] same: %s", fileData.Path)
 			return
 		}
 	}
@@ -493,52 +490,52 @@ func handleMessageFile(fileData fileModel, force bool) {
 	}
 	//
 	var output string
-	err = ioutil.WriteFile(fileName, []byte(fileContent), 0666)
+	err = ioutil.WriteFile(fileData.Path, []byte(fileContent), 0666)
 	if err != nil {
-		logger.Error("[file] write error: '%s' %s", fileName, err)
+		logger.Error("[file] write error: '%s' %s", fileData.Path, err)
 		return
 	}
 	if fileData.Type == "exec" {
-		logger.Info("[exec] start: '%s'", fileName)
-		_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", fileName))
-		output, err = Cmd(fileName)
+		logger.Info("[exec] start: '%s'", fileData.Path)
+		_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", fileData.Path))
+		output, err = Cmd(fileData.Path)
 		if err != nil {
-			logger.Error("[exec] error: '%s' %s %s", fileName, err, output)
+			logger.Error("[exec] error: '%s' %s %s", fileData.Path, err, output)
 		} else {
-			logger.Info("[exec] success: '%s'", fileName)
+			logger.Info("[exec] success: '%s'", fileData.Path)
 		}
 	} else if fileData.Type == "bash" {
-		logger.Info("[bash] start: '%s'", fileName)
-		_, _ = Bash("-c", fmt.Sprintf("chmod +x %s", fileName))
-		output, err = Bash(fileName)
+		logger.Info("[bash] start: '%s'", fileData.Path)
+		_, _ = Bash("-c", fmt.Sprintf("chmod +x %s", fileData.Path))
+		output, err = Bash(fileData.Path)
 		if err != nil {
-			logger.Error("[bash] error: '%s' %s %s", fileName, err, output)
+			logger.Error("[bash] error: '%s' %s %s", fileData.Path, err, output)
 		} else {
-			logger.Info("[bash] success: '%s'", fileName)
+			logger.Info("[bash] success: '%s'", fileData.Path)
 		}
 	} else if fileData.Type == "yml" {
-		logger.Info("[yml] start: '%s'", fileName)
+		logger.Info("[yml] start: '%s'", fileData.Path)
 		cmd := fmt.Sprintf("cd %s && docker-compose up -d --remove-orphans", fileDir)
 		output, err = Cmd("-c", cmd)
 		if err != nil {
-			logger.Error("[yml] error: '%s' %s %s", fileName, err, output)
+			logger.Error("[yml] error: '%s' %s %s", fileData.Path, err, output)
 		} else {
-			logger.Info("[yml] success: '%s'", fileName)
+			logger.Info("[yml] success: '%s'", fileData.Path)
 		}
 	} else if fileData.Type == "nginx" {
-		logger.Info("[nginx] start: '%s'", fileName)
+		logger.Info("[nginx] start: '%s'", fileData.Path)
 		output, err = Cmd("-c", "nginx -s reload")
 		if err != nil {
-			logger.Error("[nginx] error: '%s' %s %s", fileName, err, output)
+			logger.Error("[nginx] error: '%s' %s %s", fileData.Path, err, output)
 		} else {
-			logger.Info("[nginx] success: '%s'", fileName)
+			logger.Info("[nginx] success: '%s'", fileData.Path)
 		}
-	} else if fileData.Type == "danted" {
-		loadDanted(fileName, fileData)
-	} else if fileData.Type == "xray" {
-		loadXray(fileName, fileData)
 	} else if fileData.Type == "configure" {
-		loadConfigure(fileName, 0)
+		loadConfigure(fileData.Path, 0)
+	} else if fileData.Type == "danted" {
+		loadDanted(fileData)
+	} else if fileData.Type == "xray" {
+		loadXray(fileData)
 	}
 }
 
@@ -667,76 +664,6 @@ func convertConfigure(config string) string {
 	return fmt.Sprintf("%s\n%s", config, `// vyos-config-version: "bgp@2:broadcast-relay@1:cluster@1:config-management@1:conntrack@3:conntrack-sync@2:dhcp-relay@2:dhcp-server@6:dhcpv6-server@1:dns-forwarding@3:firewall@7:flow-accounting@1:https@3:interfaces@26:ipoe-server@1:ipsec@9:isis@1:l2tp@4:lldp@1:mdns@1:monitoring@1:nat@5:nat66@1:ntp@1:openconnect@2:ospf@1:policy@3:pppoe-server@5:pptp@2:qos@1:quagga@10:rpki@1:salt@1:snmp@2:ssh@2:sstp@4:system@25:vrf@3:vrrp@3:vyos-accel-ppp@2:wanloadbalance@3:webproxy@2"`)
 }
 
-// 加载danted
-func loadDanted(fileName string, fileData fileModel) {
-	key := StringMd5(fileName)
-	rand := RandString(6)
-	dantedMap[key] = rand
-	go func() {
-		for {
-			if rand != dantedMap[key] {
-				logger.Debug("[danted] jump: '%s'", fileName)
-				break
-			}
-			res, _ := Cmd("-c", "wg")
-			if len(res) == 0 {
-				logger.Debug("[danted] wait: '%s' wireguard not started", fileName)
-				time.Sleep(10 * time.Second)
-				continue
-			}
-			//
-			program := fmt.Sprintf("danted -f %s", fileName)
-			killPsef(program)
-			time.Sleep(1 * time.Second)
-			logger.Info("[danted] start: '%s'", fileName)
-			cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", program)
-			output, err := Cmd("-c", cmd)
-			if err != nil {
-				logger.Error("[danted] error: '%s' %s %s", fileName, err, output)
-			} else {
-				logger.Info("[danted] success: '%s'", fileName)
-				daemonStart(program, fileData)
-			}
-			break
-		}
-	}()
-}
-
-// 加载xray
-func loadXray(fileName string, fileData fileModel) {
-	key := StringMd5(fileName)
-	rand := RandString(6)
-	xrayMap[key] = rand
-	go func() {
-		for {
-			if rand != xrayMap[key] {
-				logger.Debug("[xray] jump: '%s'", fileName)
-				break
-			}
-			res, _ := Cmd("-c", "wg")
-			if len(res) == 0 {
-				logger.Debug("[xray] wait: '%s' wireguard not started", fileName)
-				time.Sleep(10 * time.Second)
-				continue
-			}
-			//
-			program := fmt.Sprintf("%s/xray run -c %s", binDir, fileName)
-			killPsef(program)
-			time.Sleep(1 * time.Second)
-			logger.Info("[xray] start: '%s'", fileName)
-			cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", program)
-			output, err := Cmd("-c", cmd)
-			if err != nil {
-				logger.Error("[xray] error: '%s' %s %s", fileName, err, output)
-			} else {
-				logger.Info("[xray] success: '%s'", fileName)
-				daemonStart(program, fileData)
-			}
-			break
-		}
-	}()
-}
-
 // 加载configure
 func loadConfigure(fileName string, againNum int) {
 	if configUpdating {
@@ -782,6 +709,76 @@ func loadConfigure(fileName string, againNum int) {
 	}()
 }
 
+// 加载danted
+func loadDanted(fileData fileModel) {
+	key := StringMd5(fileData.Path)
+	rand := RandString(6)
+	dantedMap[key] = rand
+	go func() {
+		for {
+			if rand != dantedMap[key] {
+				logger.Debug("[danted] jump: '%s'", fileData.Path)
+				break
+			}
+			res, _ := Cmd("-c", "wg")
+			if len(res) == 0 {
+				logger.Debug("[danted] wait wireguard: '%s'", fileData.Path)
+				time.Sleep(10 * time.Second)
+				continue
+			}
+			//
+			content := fmt.Sprintf("danted -f %s", fileData.Path)
+			killPsef(content)
+			time.Sleep(1 * time.Second)
+			logger.Info("[danted] start: '%s'", fileData.Path)
+			cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", content)
+			output, err := Cmd("-c", cmd)
+			if err != nil {
+				logger.Error("[danted] error: '%s' %s %s", fileData.Path, err, output)
+			} else {
+				logger.Info("[danted] success: '%s'", fileData.Path)
+				daemonPsef(content, fileData)
+			}
+			break
+		}
+	}()
+}
+
+// 加载xray
+func loadXray(fileData fileModel) {
+	key := StringMd5(fileData.Path)
+	rand := RandString(6)
+	xrayMap[key] = rand
+	go func() {
+		for {
+			if rand != xrayMap[key] {
+				logger.Debug("[xray] jump: '%s'", fileData.Path)
+				break
+			}
+			res, _ := Cmd("-c", "wg")
+			if len(res) == 0 {
+				logger.Debug("[xray] wait wireguard: '%s'", fileData.Path)
+				time.Sleep(10 * time.Second)
+				continue
+			}
+			//
+			content := fmt.Sprintf("%s/xray run -c %s", binDir, fileData.Path)
+			killPsef(content)
+			time.Sleep(1 * time.Second)
+			logger.Info("[xray] start: '%s'", fileData.Path)
+			cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", content)
+			output, err := Cmd("-c", cmd)
+			if err != nil {
+				logger.Error("[xray] error: '%s' %s %s", fileData.Path, err, output)
+			} else {
+				logger.Info("[xray] success: '%s'", fileData.Path)
+				daemonPsef(content, fileData)
+			}
+			break
+		}
+	}()
+}
+
 // 格式化要发送的消息
 func formatSendMsg(action string, data interface{}) string {
 	sendData := &sendModel{Type: "node", Action: action, Data: data}
@@ -819,8 +816,8 @@ func computePing(var1, var2 float64) bool {
 }
 
 // 杀死根据 ps -ef 查出来的
-func killPsef(value string) {
-	cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep' | awk '{print $2}'", value)
+func killPsef(content string) {
+	cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep' | awk '{print $2}'", content)
 	output, _ := Cmd("-c", cmd)
 	if len(output) > 0 {
 		sc := bufio.NewScanner(strings.NewReader(output))
@@ -832,9 +829,9 @@ func killPsef(value string) {
 	}
 }
 
-// 守护进程
-func daemonStart(value string, fileData fileModel) {
-	key := StringMd5(value)
+// 守护进程根据 ps -ef 查出来的
+func daemonPsef(content string, fileData fileModel) {
+	key := StringMd5(content)
 	rand := RandString(6)
 	daemonMap[key] = rand
 	go func() {
@@ -844,12 +841,17 @@ func daemonStart(value string, fileData fileModel) {
 			select {
 			case <-t.C:
 				if rand != daemonMap[key] {
+					logger.Debug("[daemon] jump: '%s'", content)
 					return
 				}
-				cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep'", value)
+				if !Exists(fileData.Path) {
+					logger.Debug("[daemon] stop: '%s'", content)
+					return
+				}
+				cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep'", content)
 				output, _ := Cmd("-c", cmd)
 				if len(output) == 0 {
-					logger.Error("[daemon] lose: '%s'", value)
+					logger.Error("[daemon] lose: '%s'", content)
 					handleMessageFile(fileData, true)
 					return
 				}
