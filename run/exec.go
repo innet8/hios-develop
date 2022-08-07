@@ -12,9 +12,11 @@ import (
 func ExecStart() {
 	logger.Info("---------- exec start ----------")
 	status := "success"
+	error_ := ""
 	cmdErr := ExecConf.SSHConfig.CmdAsync(ExecConf.Ip, ExecConf.Cmd)
 	if cmdErr != nil {
 		status = "error"
+		error_ = cmdErr.Error()
 	}
 	if strings.HasPrefix(ExecConf.Url, "http://") || strings.HasPrefix(ExecConf.Url, "https://") {
 		logger.Info("---------- callback start ----------")
@@ -23,7 +25,7 @@ func ExecStart() {
 			FormData(map[string]string{
 				"ip":        ExecConf.Ip,
 				"status":    status,
-				"error":     cmdErr.Error(),
+				"error":     error_,
 				"timestamp": timestamp,
 			}).
 			Post(ExecConf.Url)
