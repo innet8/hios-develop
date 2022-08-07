@@ -37,6 +37,9 @@ var execCmd = &cobra.Command{
 		if len(run.ExecConf.Cmd) > 0 {
 			run.ExecConf.Cmd = run.Base64Decode(run.ExecConf.Cmd)
 		}
+		if len(run.ExecConf.Param) > 0 {
+			run.ExecConf.Param = run.Base64Decode(run.ExecConf.Param)
+		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		run.ExecStart()
@@ -46,8 +49,9 @@ var execCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(execCmd)
 	execCmd.Flags().StringVar(&run.ExecConf.Host, "host", "", "192.168.0.5 or 192.168.0.5:22")
-	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.User, "user", "root", "Servers user name for ssh")
-	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.Password, "password", "", "Password for ssh, It’s base64 encode")
-	execCmd.Flags().StringVar(&run.ExecConf.Cmd, "cmd", "", "Command, It’s base64 encode")
+	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.User, "user", "root", "User, default: root")
+	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.Password, "password", "", "Password, it’s base64 encode")
+	execCmd.Flags().StringVar(&run.ExecConf.Cmd, "cmd", "", "Command, it’s base64 encode")
+	execCmd.Flags().StringVar(&run.ExecConf.Param, "param", "", "Parameter, it’s base64 encode")
 	execCmd.Flags().StringVar(&run.ExecConf.Url, "url", "", "Callback url, \"http://\" or \"https://\" prefix")
 }

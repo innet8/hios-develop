@@ -9,6 +9,7 @@ import (
 type ExecJson struct {
 	Host      string
 	Cmd       string
+	Param     string
 	Url       string
 	SSHConfig sshutil.SSH
 }

@@ -1,6 +1,8 @@
 package run
 
 import (
+	"fmt"
+	"github.com/innet8/hios/data"
 	"github.com/innet8/hios/pkg/logger"
 	"github.com/nahid/gohttp"
 	"strconv"
@@ -10,14 +12,52 @@ import (
 
 // ExecStart 开始执行
 func ExecStart() {
+	key := StringMd5(RandString(8))
+
 	logger.Info("---------- exec start ----------")
-	status := "success"
-	error_ := ""
-	cmdErr := ExecConf.SSHConfig.CmdAsync(ExecConf.Host, ExecConf.Cmd)
-	if cmdErr != nil {
-		status = "error"
-		error_ = cmdErr.Error()
+
+	err := ExecConf.SSHConfig.SaveFileAndChmodX(ExecConf.Host, fmt.Sprintf("/tmp/.exec_%s", key), execContent(key))
+	if err != nil {
+		response(err)
+		return
 	}
+
+	err = ExecConf.SSHConfig.CmdAsync(ExecConf.Host, fmt.Sprintf("/tmp/.exec_%s %s", key, ExecConf.Param))
+	if err != nil {
+		response(err)
+		return
+	}
+
+	result := ExecConf.SSHConfig.CmdToStringNoLog(ExecConf.Host, fmt.Sprintf("cat /tmp/.exec_%s_result", key), "")
+	if result != "success" {
+		response(fmt.Errorf("result error"))
+		return
+	}
+
+	response(nil)
+
+	_ = ExecConf.SSHConfig.CmdAsync(ExecConf.Host, fmt.Sprintf("rm -f /tmp/.exec_%s", key))
+	_ = ExecConf.SSHConfig.CmdAsync(ExecConf.Host, fmt.Sprintf("rm -f /tmp/.exec_%s_result", key))
+}
+
+func execContent(key string) string {
+	var sb strings.Builder
+	sb.Write([]byte(data.ExecContent))
+	var envMap = make(map[string]interface{})
+	envMap["CMD"] = ExecConf.Cmd
+	envMap["END_TAG"] = "success"
+	envMap["END_PATH"] = fmt.Sprintf("/tmp/.exec_%s_result", key)
+	return FromTemplateContent(sb.String(), envMap)
+}
+
+func response(err error) {
+	status := "success"
+	errorMsg := ""
+	if err != nil {
+		status = "error"
+		errorMsg = err.Error()
+	}
+
 	if strings.HasPrefix(ExecConf.Url, "http://") || strings.HasPrefix(ExecConf.Url, "https://") {
 		logger.Info("---------- callback start ----------")
 		ip, _ := GetIpAndPort(ExecConf.Host)
@@ -26,7 +66,7 @@ func ExecStart() {
 			FormData(map[string]string{
 				"ip":        ip,
 				"status":    status,
-				"error":     error_,
+				"error":     errorMsg,
 				"timestamp": timestamp,
 			}).
 			Post(ExecConf.Url)
@@ -36,5 +76,6 @@ func ExecStart() {
 			logger.Info("---------- callback end ----------")
 		}
 	}
+
 	logger.Info("---------- exec end ----------")
 }
