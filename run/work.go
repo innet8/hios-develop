@@ -493,16 +493,7 @@ func handleMessageFile(fileData fileModel, force bool) {
 		logger.Error("[file] write error: '%s' %s", fileData.Path, err)
 		return
 	}
-	if fileData.Type == "sh" {
-		logger.Info("[exec] start: '%s'", fileData.Path)
-		_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", fileData.Path))
-		output, err = Cmd(fileData.Path)
-		if err != nil {
-			logger.Error("[exec] error: '%s' %s %s", fileData.Path, err, output)
-		} else {
-			logger.Info("[exec] success: '%s'", fileData.Path)
-		}
-	} else if fileData.Type == "exec" || fileData.Type == "bash" {
+	if InArray(fileData.Type, []string{"bash", "cmd", "exec"}) {
 		logger.Info("[bash] start: '%s'", fileData.Path)
 		_, _ = Bash("-c", fmt.Sprintf("chmod +x %s", fileData.Path))
 		output, err = Bash(fileData.Path)
@@ -510,6 +501,15 @@ func handleMessageFile(fileData fileModel, force bool) {
 			logger.Error("[bash] error: '%s' %s %s", fileData.Path, err, output)
 		} else {
 			logger.Info("[bash] success: '%s'", fileData.Path)
+		}
+	} else if fileData.Type == "sh" {
+		logger.Info("[sh] start: '%s'", fileData.Path)
+		_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", fileData.Path))
+		output, err = Cmd(fileData.Path)
+		if err != nil {
+			logger.Error("[sh] error: '%s' %s %s", fileData.Path, err, output)
+		} else {
+			logger.Info("[sh] success: '%s'", fileData.Path)
 		}
 	} else if fileData.Type == "yml" {
 		logger.Info("[yml] start: '%s'", fileData.Path)
@@ -844,6 +844,7 @@ func daemonPsef(content string, fileData fileModel) {
 				}
 				if !Exists(fileData.Path) {
 					logger.Debug("[daemon] stop: '%s'", content)
+					killPsef(content)
 					return
 				}
 				cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep'", content)
