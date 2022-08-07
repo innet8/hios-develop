@@ -495,7 +495,7 @@ func handleMessageFile(fileData fileModel, force bool) {
 		logger.Error("[file] write error: '%s' %s", fileData.Path, err)
 		return
 	}
-	if fileData.Type == "exec" {
+	if fileData.Type == "sh" {
 		logger.Info("[exec] start: '%s'", fileData.Path)
 		_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", fileData.Path))
 		output, err = Cmd(fileData.Path)
@@ -504,7 +504,7 @@ func handleMessageFile(fileData fileModel, force bool) {
 		} else {
 			logger.Info("[exec] success: '%s'", fileData.Path)
 		}
-	} else if fileData.Type == "bash" {
+	} else if fileData.Type == "exec" || fileData.Type == "bash" {
 		logger.Info("[bash] start: '%s'", fileData.Path)
 		_, _ = Bash("-c", fmt.Sprintf("chmod +x %s", fileData.Path))
 		output, err = Bash(fileData.Path)
