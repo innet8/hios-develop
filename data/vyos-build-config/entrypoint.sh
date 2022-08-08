@@ -111,6 +111,25 @@ EOF
     systemctl restart dnsmasq
 }
 
+check_sysctl() {
+    if [ -z "$(cat /etc/sysctl.conf | grep 'net.ipv6.conf.all.disable_ipv6' | grep -v 'grep')" ]; then
+        echo "net.ipv6.conf.all.disable_ipv6 = 0" >> /etc/sysctl.conf
+    else
+        sed -i "/net.ipv6.conf.all.disable_ipv6/c net.ipv6.conf.all.disable_ipv6 = 0" /etc/sysctl.conf
+    fi
+    if [ -z "$(cat /etc/sysctl.conf | grep 'net.ipv6.conf.default.disable_ipv6' | grep -v 'grep')" ]; then
+        echo "net.ipv6.conf.default.disable_ipv6 = 0" >> /etc/sysctl.conf
+    else
+        sed -i "/net.ipv6.conf.default.disable_ipv6/c net.ipv6.conf.default.disable_ipv6 = 0" /etc/sysctl.conf
+    fi
+    if [ -z "$(cat /etc/sysctl.conf | grep 'net.ipv6.conf.lo.disable_ipv6' | grep -v 'grep')" ]; then
+        echo "net.ipv6.conf.lo.disable_ipv6 = 0" >> /etc/sysctl.conf
+    else
+        sed -i "/net.ipv6.conf.lo.disable_ipv6/c net.ipv6.conf.lo.disable_ipv6 = 0" /etc/sysctl.conf
+    fi
+    sysctl -p
+}
+
 load_init() {
     echo "----start: $(date "+%Y-%m-%d %H:%M:%S")----"
 
@@ -128,6 +147,7 @@ load_init() {
         check_configure
         check_iptables
         check_dnsmasq
+        check_sysctl
 
         local exist=`ps -ef | grep "${binDir}/hios work" | grep -v "grep"`
         if [ -z "$exist" ]; then
