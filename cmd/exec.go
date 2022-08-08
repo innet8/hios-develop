@@ -13,8 +13,8 @@ var execCmd = &cobra.Command{
 	Use:   "exec",
 	Short: "Exec",
 	PreRun: func(cmd *cobra.Command, args []string) {
-		if len(run.ExecConf.Host) == 0 || run.ExecConf.Cmd == "" || run.ExecConf.Url == "" {
-			run.PrintError("host/cmd/url required.")
+		if len(run.ExecConf.Host) == 0 || run.ExecConf.Cmd == "" {
+			run.PrintError("host/cmd required.")
 			os.Exit(0)
 		}
 		ip := run.ExecConf.Host
