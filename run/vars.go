@@ -11,6 +11,7 @@ type ExecJson struct {
 	Cmd       string
 	Param     string
 	Url       string
+	LogFile   string
 	SSHConfig sshutil.SSH
 }
 

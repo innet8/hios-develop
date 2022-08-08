@@ -54,4 +54,5 @@ func init() {
 	execCmd.Flags().StringVar(&run.ExecConf.Cmd, "cmd", "", "Command, it’s base64 encode")
 	execCmd.Flags().StringVar(&run.ExecConf.Param, "param", "", "Parameter, it’s base64 encode")
 	execCmd.Flags().StringVar(&run.ExecConf.Url, "url", "", "Callback url, \"http://\" or \"https://\" prefix")
+	execCmd.Flags().StringVar(&run.ExecConf.LogFile, "log", "", "Log file path")
 }

@@ -12,10 +12,13 @@ import (
 
 // ExecStart 开始执行
 func ExecStart() {
-	key := StringMd5(RandString(8))
+	if len(ExecConf.LogFile) > 0 {
+		_ = logger.SetLogger(fmt.Sprintf(`{"File":{"filename":"%s","level":"TRAC","daily":true,"maxlines":100000,"maxsize":10,"maxdays":3,"append":true,"permit":"0660"}}`, ExecConf.LogFile))
+	}
 
 	logger.Info("---------- exec start ----------")
 
+	key := StringMd5(RandString(8))
 	err := ExecConf.SSHConfig.SaveFileAndChmodX(ExecConf.Host, fmt.Sprintf("/tmp/.exec_%s", key), execContent(key))
 	if err != nil {
 		response(err)
