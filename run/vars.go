@@ -20,6 +20,18 @@ type RsaJson struct {
 	Private string
 }
 
+type Wireguard struct {
+	T            time.Time
+	Name         string
+	Public       string
+	Received     uint64
+	ReceivedDiff uint64
+	Sent         uint64
+	SentDiff     uint64
+	Up           uint64
+	Down         uint64
+}
+
 type State struct {
 	T   time.Time
 	Cpu float64

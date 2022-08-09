@@ -37,16 +37,17 @@ var (
 	configUpdating bool
 	configContinue string
 
-	ws         *wsc.Wsc
-	hostState  *State
-	netIoInNic *NetIoNic
+	ws        *wsc.Wsc
+	hostState *State
 
-	costMap    = make(map[string]*costModel)
-	monitorMap = make(map[string]*monitorModel)
-	pingMap    = make(map[string]float64)
-	dantedMap  = make(map[string]string)
-	xrayMap    = make(map[string]string)
-	daemonMap  = make(map[string]string)
+	costMap     = make(map[string]*costModel)
+	monitorMap  = make(map[string]*monitorModel)
+	transferMap = make(map[string]*Wireguard)
+	speedMap    = make(map[string]*Wireguard)
+	pingMap     = make(map[string]float64)
+	dantedMap   = make(map[string]string)
+	xrayMap     = make(map[string]string)
+	daemonMap   = make(map[string]string)
 )
 
 type msgModel struct {
@@ -204,15 +205,10 @@ func onConnected() {
 			select {
 			case <-t.C:
 				if r != connectRand {
+					logger.Debug("[timed] '%s' task A jump", r)
 					return
 				}
-				err := timedTaskA()
-				if err != nil {
-					logger.Debug("[timed] task A: %s", err)
-				}
-				if err == wsc.CloseErr {
-					return
-				}
+				timedTaskA()
 			}
 		}
 	}()
@@ -224,15 +220,10 @@ func onConnected() {
 			select {
 			case <-t.C:
 				if r != connectRand {
+					logger.Debug("[timed] '%s' task B jump", r)
 					return
 				}
-				err := timedTaskB()
-				if err != nil {
-					logger.Debug("[timed] task B: %s", err)
-				}
-				if err == wsc.CloseErr {
-					return
-				}
+				timedTaskB()
 			}
 		}
 	}()
@@ -257,57 +248,89 @@ func startRun() {
 }
 
 // 定时任务A（上报：系统状态、入口网速）
-func timedTaskA() error {
+func timedTaskA() {
 	hiMode := os.Getenv("HI_MODE")
-	sendMessage := ""
 	if hiMode == "host" {
-		hostState = GetHostState(hostState)
-		if hostState != nil {
-			value, err := json.Marshal(hostState)
-			if err != nil {
-				logger.Error("[state] host error: %s", err)
-			} else {
-				sendMessage = formatSendMsg("state", string(value))
-			}
-		}
+		getState()
 	} else if hiMode == "hihub" {
-		netIoInNic = GetNetIoInNic(netIoInNic)
-		if netIoInNic != nil {
-			value, err := json.Marshal(netIoInNic)
-			if err != nil {
-				logger.Error("[netio] in nic error: %s", err)
-			} else {
-				sendMessage = formatSendMsg("netio", string(value))
-			}
-		}
+		getSpeed()
 	}
-	if sendMessage != "" {
-		return ws.SendTextMessage(sendMessage)
-	}
-	return nil
 }
 
-// 定时任务B（上报：ping、检查xray、流量统计）
-func timedTaskB() error {
+// 定时任务B（上报：ping、流量统计）
+func timedTaskB() {
 	hiMode := os.Getenv("HI_MODE")
-	sendMessage := ""
 	if hiMode == "hihub" {
 		// 公网 ping
-		sendErr := pingSend(fmt.Sprintf("%s/ips", workDir))
-		if sendErr != nil {
-			return sendErr
-		}
+		pingSend()
 		// 对端 ping
-		go pingPPP()
-		// todo wg 流量统计
-	} else {
-		// 发送刷新
-		sendMessage = formatSendMsg("refresh", time.Now().Unix())
+		pingPPP()
+		// wg 流量统计
+		getTransfer()
 	}
-	if sendMessage != "" {
-		return ws.SendTextMessage(sendMessage)
+}
+
+// 主机状态
+func getState() {
+	hostState = GetHostState(hostState)
+	if hostState == nil {
+		return
 	}
-	return nil
+	value, err := json.Marshal(hostState)
+	if err != nil {
+		logger.Error("[state] host error: %s", err)
+		return
+	}
+	sendMessage := formatSendMsg("state", string(value))
+	_ = ws.SendTextMessage(sendMessage)
+}
+
+// wg网速计算
+func getSpeed() {
+	speedMap = GetWireguardTransfer(speedMap, false)
+	if speedMap == nil {
+		return
+	}
+	var array []string
+	for _, speed := range speedMap {
+		val, err := json.Marshal(speed)
+		if err == nil {
+			array = append(array, string(val))
+		}
+	}
+	if len(array) == 0 {
+		return
+	}
+	value, err := json.Marshal(array)
+	if err != nil {
+		return
+	}
+	sendMessage := formatSendMsg("speed", string(value))
+	_ = ws.SendTextMessage(sendMessage)
+}
+
+// wg流量统计
+func getTransfer() {
+	transferMap = GetWireguardTransfer(transferMap, true)
+	if transferMap == nil {
+		return
+	}
+	var array []string
+	for _, transfer := range transferMap {
+		val, err := json.Marshal(transfer)
+		if err == nil {
+			array = append(array, string(val))
+		}
+	}
+	if len(array) == 0 {
+		return
+	}
+	value, err := json.Marshal(array)
+	if err != nil {
+		return
+	}
+	sendMessage := formatSendMsg("transfer", string(value))
+	_ = ws.SendTextMessage(sendMessage)
 }
 
 // ping 对端并更新对端cost值
@@ -365,18 +388,19 @@ func pingPPP() {
 }
 
 // ping 文件并发送
-func pingSend(fileName string) error {
+func pingSend() {
+	fileName := fmt.Sprintf("%s/ips", workDir)
 	if !Exists(fileName) {
-		return nil
+		return
 	}
 	logger.Debug("[ping] start '%s'", fileName)
 	result, err := pingFile(fileName, "")
 	if err != nil {
 		logger.Debug("[ping] error '%s': %s", fileName, err)
-		return nil
+		return
 	}
 	sendMessage := formatSendMsg("ping", result)
-	return ws.SendTextMessage(sendMessage)
+	_ = ws.SendTextMessage(sendMessage)
 }
 
 // ping文件

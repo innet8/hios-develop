@@ -1,6 +1,7 @@
 package run
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/md5"
@@ -17,10 +18,12 @@ import (
 	"github.com/shirou/gopsutil/mem"
 	gopsnet "github.com/shirou/gopsutil/net"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 	"text/template"
@@ -296,46 +299,51 @@ func GetHostState(lastState *State) *State {
 	return state
 }
 
-// GetNetIoInNic 获取入口网卡的网速
-func GetNetIoInNic(lastNetIoNic *NetIoNic) *NetIoNic {
-	ioStats, err := gopsnet.IOCounters(true)
+// GetWireguardTransfer 获取Wireguard Transfers
+func GetWireguardTransfer(records map[string]*Wireguard, onlyDiff bool) map[string]*Wireguard {
+	result, err := Cmd("-c", "wg show all transfer")
 	if err != nil {
-		logger.Warn("get io counters failed:", err)
-	} else if len(ioStats) > 0 {
-		stat := gopsnet.IOCountersStat{
-			Name: "all",
-		}
-		for _, nic := range ioStats {
-			if strings.HasSuffix(nic.Name, "wg1") {
-				stat.BytesRecv += nic.BytesRecv
-				stat.PacketsRecv += nic.PacketsRecv
-				stat.Errin += nic.Errin
-				stat.Dropin += nic.Dropin
-				stat.BytesSent += nic.BytesSent
-				stat.PacketsSent += nic.PacketsSent
-				stat.Errout += nic.Errout
-				stat.Dropout += nic.Dropout
-			}
-		}
-		now := time.Now()
-		netIoNic := &NetIoNic{
-			T:    now,
-			Sent: stat.BytesSent,
-			Recv: stat.BytesRecv,
-		}
-		if lastNetIoNic != nil {
-			duration := now.Sub(lastNetIoNic.T)
-			seconds := float64(duration) / float64(time.Second)
-			up := uint64(float64(netIoNic.Sent-lastNetIoNic.Sent) / seconds)
-			down := uint64(float64(netIoNic.Recv-lastNetIoNic.Recv) / seconds)
-			netIoNic.Up = up
-			netIoNic.Down = down
-		}
-		return netIoNic
-	} else {
-		logger.Warn("can not find io counters")
+		return nil
 	}
-	return nil
+	scanner := bufio.NewScanner(strings.NewReader(result))
+	data := make(map[string]*Wireguard)
+	now := time.Now()
+	for scanner.Scan() {
+		content := strings.Fields(scanner.Text())
+		if !strings.HasPrefix(content[0], "wg1") {
+			continue
+		}
+		wireguard := &Wireguard{
+			T:      now,
+			Name:   content[0],
+			Public: content[1],
+		}
+		wireguard.Received, _ = strconv.ParseUint(content[2], 10, 64)
+		wireguard.Sent, _ = strconv.ParseUint(content[3], 10, 64)
+		if wireguard.Received == 0 && wireguard.Sent == 0 {
+			continue
+		}
+		wireguard.ReceivedDiff = wireguard.Received
+		wireguard.SentDiff = wireguard.Sent
+		//
+		key := StringMd5(fmt.Sprintf("%s:%s", wireguard.Name, wireguard.Public))
+		if record, ok := records[key]; ok {
+			wireguard.ReceivedDiff = uint64(math.Max(0, float64(wireguard.Received-record.Received)))
+			wireguard.SentDiff = uint64(math.Max(0, float64(wireguard.Sent-record.Sent)))
+			duration := now.Sub(record.T)
+			seconds := float64(duration) / float64(time.Second)
+			up := float64(wireguard.SentDiff) / seconds
+			down := float64(wireguard.ReceivedDiff) / seconds
+			wireguard.Up = uint64(up)
+			wireguard.Down = uint64(down)
+		}
+		//
+		if onlyDiff == false || wireguard.ReceivedDiff > 0 || wireguard.SentDiff > 0 {
+			data[key] = wireguard
+		}
+	}
+	//
+	return data
 }
 
 // FromTemplateContent 获取模板内容
