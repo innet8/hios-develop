@@ -60,6 +60,7 @@ type msgModel struct {
 type fileModel struct {
 	Type    string `json:"type"`
 	Path    string `json:"path"`
+	Before  string `json:"before"`
 	Content string `json:"content"`
 }
 
@@ -479,6 +480,7 @@ func handleMessageReceived(message string) {
 // 保存文件或运行文件
 func handleMessageFile(fileData fileModel, force bool) {
 	var err error
+	var output string
 	if !strings.HasPrefix(fileData.Path, "/") {
 		fileData.Path = fmt.Sprintf("%s/%s", workDir, fileData.Path)
 	}
@@ -507,11 +509,27 @@ func handleMessageFile(fileData fileModel, force bool) {
 	}
 	FileMd5.Store(fileKey, contentKey)
 	//
+	if len(fileData.Before) > 0 {
+		beforeFile := fmt.Sprintf("%s.before", fileData.Path)
+		err = ioutil.WriteFile(beforeFile, []byte(fileData.Before), 0666)
+		if err != nil {
+			logger.Error("[before] write before error: '%s' %s", beforeFile, err)
+			return
+		}
+		logger.Info("[before] start: '%s'", beforeFile)
+		_, _ = Bash("-c", fmt.Sprintf("chmod +x %s", beforeFile))
+		output, err = Bash(beforeFile)
+		if err != nil {
+			logger.Error("[before] error: '%s' %s %s", beforeFile, err, output)
+		} else {
+			logger.Info("[before] success: '%s'", beforeFile)
+		}
+	}
+	//
 	if fileData.Type == "configure" {
 		fileContent = convertConfigure(fileContent)
 	}
 	//
-	var output string
 	err = ioutil.WriteFile(fileData.Path, []byte(fileContent), 0666)
 	if err != nil {
 		logger.Error("[file] write error: '%s' %s", fileData.Path, err)
