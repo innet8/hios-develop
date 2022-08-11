@@ -611,7 +611,7 @@ func handleMessageMonitorIp(rand string, content string) {
 		}
 		fileText = append(fileText, ip)
 	}
-	fileName := fmt.Sprintf("%s/monitorip_%s.txt", workDir, rand)
+	fileName := fmt.Sprintf("%s/monitorip", workDir)
 	err := ioutil.WriteFile(fileName, []byte(strings.Join(fileText, "\n")), 0666)
 	if err != nil {
 		logger.Error("[monitorip] '%s' write file error: '%s' %s", rand, fileName, err)
@@ -620,8 +620,7 @@ func handleMessageMonitorIp(rand string, content string) {
 	//
 	for {
 		if rand != monitorRand {
-			_ = os.Remove(fileName)
-			logger.Debug("[monitorip] '%s' jump thread", rand)
+			logger.Debug("[monitorip] '%s' jump", rand)
 			return
 		}
 		result, pingErr := pingFileMap(fileName, "", 2000, 4)
