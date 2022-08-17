@@ -34,6 +34,9 @@ var execCmd = &cobra.Command{
 		if run.ExecConf.SSHConfig.Password != "" {
 			run.ExecConf.SSHConfig.Password = run.Base64Decode(run.ExecConf.SSHConfig.Password)
 		}
+		if run.ExecConf.SSHConfig.PkFile != "" {
+			run.ExecConf.SSHConfig.PkPassword = run.ExecConf.SSHConfig.Password
+		}
 		if len(run.ExecConf.Cmd) > 0 {
 			run.ExecConf.Cmd = run.Base64Decode(run.ExecConf.Cmd)
 		}
@@ -50,7 +53,8 @@ func init() {
 	rootCmd.AddCommand(execCmd)
 	execCmd.Flags().StringVar(&run.ExecConf.Host, "host", "", "192.168.0.5 or 192.168.0.5:22")
 	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.User, "user", "root", "User, default: root")
-	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.Password, "password", "", "Password, it’s base64 encode")
+	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.Password, "password", "", "Password, it’s base64 encode (If set pkfile, it is the password for pkfile)")
+	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.PkFile, "pkfile", "", "Key path, if set, log in with key")
 	execCmd.Flags().StringVar(&run.ExecConf.Cmd, "cmd", "", "Command, it’s base64 encode")
 	execCmd.Flags().StringVar(&run.ExecConf.Param, "param", "", "Parameter, it’s base64 encode")
 	execCmd.Flags().StringVar(&run.ExecConf.Url, "url", "", "Callback url, \"http://\" or \"https://\" prefix")
