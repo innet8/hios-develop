@@ -235,6 +235,7 @@ func startRun() {
 	_ = os.RemoveAll(tmpDir)
 	_ = os.MkdirAll(tmpDir, os.ModePerm)
 	//
+	_ = os.MkdirAll(workDir, os.ModePerm)
 	_ = os.MkdirAll(startDir, os.ModePerm)
 	path := fmt.Sprintf(startDir)
 	files, err := filepath.Glob(filepath.Join(path, "*"))
