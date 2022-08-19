@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/innet8/hios/pkg/logger"
 	"github.com/innet8/hios/pkg/xrsa"
+	"github.com/innet8/hios/version"
 	"github.com/togettoyou/wsc"
 	"io/ioutil"
 	"math"
@@ -121,7 +122,7 @@ func WorkStart() {
 		origin = fmt.Sprintf("%s/%s/%s", origins[0], origins[1], origins[2])
 	}
 	nodeName, _ := os.Hostname()
-	wsUrl := fmt.Sprintf("%s/ws?action=hios&mode=%s&token=%s&name=%s&cid=%s", origin, os.Getenv("HI_MODE"), os.Getenv("HI_TOKEN"), nodeName, os.Getenv("HI_CID"))
+	wsUrl := fmt.Sprintf("%s/ws?action=hios&mode=%s&token=%s&name=%s&cid=%s&ver=%s&sha=%s", origin, os.Getenv("HI_MODE"), os.Getenv("HI_TOKEN"), nodeName, os.Getenv("HI_CID"), version.Version, version.CommitSHA)
 	//
 	err := Mkdir(logDir, 0755)
 	if err != nil {
