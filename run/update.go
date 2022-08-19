@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/c4milo/unpackit"
+	"github.com/innet8/hios/pkg/logger"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
 
 var (
@@ -25,10 +24,10 @@ type release struct {
 //UpdateStart is
 func UpdateStart() {
 	if !IsFile(binPath) {
-		log.Fatal("Hios is not installed")
+		logger.Fatal("Hios is not installed")
 	}
 	destPath := downloadLatest()
-	copyHiosFile(destPath)
+	copyHios(destPath)
 	restartHios()
 	fmt.Println("Update completed")
 }
@@ -37,11 +36,11 @@ func downloadLatest() string {
 	// get version
 	data, err := http.Get("https://api.github.com/repos/innet8/hios/releases/latest")
 	if err != nil {
-		log.Fatal(err.Error())
+		logger.Fatal(err.Error())
 	}
 	b, err := ioutil.ReadAll(data.Body)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 	rl := new(release)
 	_ = json.Unmarshal(b, &rl)
@@ -53,20 +52,37 @@ func downloadLatest() string {
 	fmt.Println("download package from ", downloadUrl)
 	resp, err := http.Get(downloadUrl)
 	if err != nil {
-		log.Fatal(err.Error())
+		logger.Fatal(err.Error())
 	}
 	destPath, err := unpackit.Unpack(resp.Body, "")
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 	return destPath
 }
 
-func copyHiosFile(srcPath string) {
-	if _, err := copyFile(filepath.Join(srcPath, "hios"), binPath); err != nil {
-		log.Fatalln(err)
-	} else {
+func copyHios(srcPath string) {
+	if IsFile(binPath) {
+		_ = os.Remove(binPath)
 	}
+
+	srcFile, err := os.Open(filepath.Join(srcPath, "hios"))
+	if err != nil {
+		logger.Fatal(err)
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(binPath)
+	if err != nil {
+		logger.Fatal(err)
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		logger.Fatal(err)
+	}
+
 	_ = os.Chmod(binPath, 0755)
 }
 
@@ -74,47 +90,13 @@ func restartHios() {
 	var err error
 	if IsFile("/usr/sbin/hicloud") {
 		// hihub
-		KillPsef(binPath)
+		KillPsef(fmt.Sprintf("%s work", binPath))
 		_, err = Cmd("-c", "/usr/sbin/hicloud")
 	} else {
 		// host
 		_, err = Cmd("-c", "supervisorctl restart hios")
 	}
 	if err != nil {
-		log.Fatalln(err)
+		logger.Fatal(err)
 	}
-}
-
-//生成目录并拷贝文件
-func copyFile(src, dest string) (w int64, err error) {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return
-	}
-	defer srcFile.Close()
-	//分割path目录
-	destSplitPathDirs := strings.Split(dest, string(filepath.Separator))
-
-	//检测时候存在目录
-	destSplitPath := ""
-	for index, dir := range destSplitPathDirs {
-		if index < len(destSplitPathDirs)-1 {
-			destSplitPath = destSplitPath + dir + string(filepath.Separator)
-			if !Exists(destSplitPath) {
-				log.Println("mkdir:" + destSplitPath)
-				//创建目录
-				err = os.Mkdir(destSplitPath, os.ModePerm)
-				if err != nil {
-					log.Fatalln(err)
-				}
-			}
-		}
-	}
-	dstFile, err := os.Create(dest)
-	if err != nil {
-		return
-	}
-	defer dstFile.Close()
-
-	return io.Copy(dstFile, srcFile)
 }
