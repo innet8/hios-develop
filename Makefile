@@ -8,7 +8,7 @@ M = $(shell printf "\033[34;1m▶\033[0m")
 GO = GOGC=off go
 MODULE = $(shell env GO111MODULE=on $(GO) list -m)
 
-VERSION			:= $(shell git describe --tags --always --match=v* 2> /dev/null || cat $(CURDIR)/.version 2> /dev/null || echo v0)
+VERSION			:= $(shell git describe --tags --always --match="v*" 2> /dev/null || cat $(CURDIR)/.version 2> /dev/null || echo v0)
 VERSION_HASH	:= $(shell git rev-parse --short HEAD)
 OS_ARCHS		:=darwin:amd64 darwin:arm64 linux:amd64 linux:arm64
 

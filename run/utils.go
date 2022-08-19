@@ -148,7 +148,11 @@ func IsDir(path string) bool {
 
 // IsFile 判断所给路径是否为文件
 func IsFile(path string) bool {
-	return !IsDir(path)
+	s, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !s.IsDir()
 }
 
 // ReadFile 读取文件
@@ -360,4 +364,18 @@ func FromTemplateContent(templateContent string, envMap map[string]interface{}) 
 	var buffer bytes.Buffer
 	_ = tmpl.Execute(&buffer, envMap)
 	return string(buffer.Bytes())
+}
+
+// KillPsef 杀死根据 ps -ef 查出来的
+func KillPsef(content string) {
+	cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep' | awk '{print $2}'", content)
+	output, _ := Cmd("-c", cmd)
+	if len(output) > 0 {
+		sc := bufio.NewScanner(strings.NewReader(output))
+		for sc.Scan() {
+			if len(sc.Text()) > 0 {
+				_, _ = Cmd("-c", fmt.Sprintf("kill -9 %s", sc.Text()))
+			}
+		}
+	}
 }

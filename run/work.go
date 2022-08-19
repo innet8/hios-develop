@@ -769,7 +769,7 @@ func loadDanted(fileData fileModel) {
 			}
 			//
 			content := fmt.Sprintf("danted -f %s", fileData.Path)
-			killPsef(content)
+			KillPsef(content)
 			time.Sleep(1 * time.Second)
 			logger.Info("[danted] start: '%s'", fileData.Path)
 			cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", content)
@@ -804,7 +804,7 @@ func loadXray(fileData fileModel) {
 			}
 			//
 			content := fmt.Sprintf("%s/xray run -c %s", binDir, fileData.Path)
-			killPsef(content)
+			KillPsef(content)
 			time.Sleep(1 * time.Second)
 			logger.Info("[xray] start: '%s'", fileData.Path)
 			cmd := fmt.Sprintf("%s > /dev/null 2>&1 &", content)
@@ -856,20 +856,6 @@ func computePing(var1, var2 float64) bool {
 	return true
 }
 
-// 杀死根据 ps -ef 查出来的
-func killPsef(content string) {
-	cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep' | awk '{print $2}'", content)
-	output, _ := Cmd("-c", cmd)
-	if len(output) > 0 {
-		sc := bufio.NewScanner(strings.NewReader(output))
-		for sc.Scan() {
-			if len(sc.Text()) > 0 {
-				_, _ = Cmd("-c", fmt.Sprintf("kill -9 %s", sc.Text()))
-			}
-		}
-	}
-}
-
 // 守护进程根据 ps -ef 查出来的
 func daemonPsef(content string, fileData fileModel) {
 	key := StringMd5(content)
@@ -887,7 +873,7 @@ func daemonPsef(content string, fileData fileModel) {
 				}
 				if !Exists(fileData.Path) {
 					logger.Debug("[daemon] stop: '%s'", content)
-					killPsef(content)
+					KillPsef(content)
 					return
 				}
 				cmd := fmt.Sprintf("ps -ef | grep '%s' | grep -v 'grep'", content)
