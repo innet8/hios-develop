@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -42,6 +43,7 @@ var (
 	hostState *State
 
 	costMap     = make(map[string]*costModel)
+	manyipMap   = make(map[string]*manyipModel)
 	monitorMap  = make(map[string]*monitorModel)
 	transferMap = make(map[string]*Wireguard)
 	speedMap    = make(map[string]*Wireguard)
@@ -87,6 +89,13 @@ type costModel struct {
 	Interface string
 	Ip        string
 	Cost      int
+}
+
+type manyipModel struct {
+	Interface string
+	Alias     string
+	CurrentIp string
+	ManyIp    string
 }
 
 type monitorModel struct {
@@ -268,6 +277,8 @@ func timedTaskB() {
 		pingSend()
 		// 对端 ping
 		pingPPP()
+		// 多IP ping
+		go pingMany()
 		// wg 流量统计
 		getTransfer()
 	}
@@ -369,6 +380,7 @@ func pingPPP() {
 			model.Cost = cost
 			costMap[ip] = model
 			costContent = fmt.Sprintf("%s\nset protocols ospf interface %s cost %d", costContent, model.Interface, model.Cost)
+			logger.Info("[cost] change %s cost: %d", model.Interface, model.Cost)
 		}
 	}
 	if len(costContent) == 0 {
@@ -387,6 +399,67 @@ func pingPPP() {
 		logger.Error("[cost] set error: %s %s", cmdRes, cmdErr)
 	} else {
 		logger.Debug("[cost] set success")
+	}
+}
+
+// ping 多ip并更新网卡地址
+func pingMany() {
+	logger.Debug("[manyip] start ping %d", len(manyipMap))
+	var execArray []string
+	var wait sync.WaitGroup
+	var lock sync.Mutex
+	for alias, model := range manyipMap {
+		wait.Add(1)
+		go func(alias string, model *manyipModel) {
+			defer wait.Done()
+			cmd := fmt.Sprintf("fping -A -u -q -4 -t 2000 -c 5 %s", model.ManyIp)
+			output, err := Cmd("-c", cmd)
+			if output == "" && err != nil {
+				return
+			}
+			result, err := formatFping(output)
+			if err != nil {
+				return
+			}
+			newIp := ""
+			newPing := float64(0)
+			oldPing := float64(0)
+			for ip, ping := range result {
+				if ping > 0 && (newPing == 0 || ping < newPing) {
+					newIp = ip
+					newPing = ping
+				}
+				if ip == model.CurrentIp {
+					oldPing = ping
+				}
+			}
+			if newIp != "" && model.CurrentIp != newIp {
+				lock.Lock()
+				model.CurrentIp = newIp
+				manyipMap[alias] = model
+				execArray = append(execArray, fmt.Sprintf("set interfaces wireguard %s peer %s address %s", model.Interface, model.Alias, newIp))
+				logger.Info("[manyip] change %s %s address: %s(%v) => %s(%v)", model.Interface, model.Alias, model.CurrentIp, oldPing, newIp, newPing)
+				lock.Unlock()
+			}
+		}(alias, model)
+	}
+	wait.Wait()
+	if len(execArray) == 0 {
+		return
+	}
+	manyipFile := fmt.Sprintf("%s/manyip", binDir)
+	manyipContent := fmt.Sprintf("#!/bin/vbash\nsource /opt/vyatta/etc/functions/script-template\n%s\ncommit\nexit", strings.Join(execArray, "\n"))
+	err := ioutil.WriteFile(manyipFile, []byte(manyipContent), 0666)
+	if err != nil {
+		logger.Error("[manyip] write file error: %s", err)
+		return
+	}
+	_, _ = Cmd("-c", fmt.Sprintf("chmod +x %s", manyipFile))
+	cmdRes, cmdErr := Command(manyipFile)
+	if cmdErr != nil {
+		logger.Error("[manyip] set error: %s %s", cmdRes, cmdErr)
+	} else {
+		logger.Debug("[manyip] set success")
 	}
 }
 
@@ -426,9 +499,14 @@ func pingFileMap(path string, source string, timeout int, count int) (map[string
 	if output == "" && err != nil {
 		return nil, err
 	}
+	return formatFping(output)
+}
+
+// 格式化fping结果
+func formatFping(output string) (map[string]float64, error) {
 	output = strings.Replace(output, " ", "", -1)
-	spaceRe, errRe := regexp.Compile(`[/:=]`)
-	if errRe != nil {
+	spaceRe, err := regexp.Compile(`[/:=]`)
+	if err != nil {
 		return nil, err
 	}
 	var resMap = make(map[string]float64)
@@ -677,7 +755,7 @@ func handleMessageMonitorIp(rand string, content string) {
 func convertConfigure(config string) string {
 	pppIp := ""
 	costMap = make(map[string]*costModel)
-	rege, err := regexp.Compile(`//\s*interface\s+(wg\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+cost`)
+	rege, err := regexp.Compile(`//\s*interface\s+(wg\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+cost`) // interface wg267 8.210.66.177 cost
 	if err == nil {
 		config = rege.ReplaceAllStringFunc(config, func(value string) string {
 			match := rege.FindStringSubmatch(value)
@@ -702,7 +780,43 @@ func convertConfigure(config string) string {
 	} else {
 		_ = os.Remove(pppFile)
 	}
+	//
+	manyipMap = make(map[string]*manyipModel)
+	rege, err = regexp.Compile(`address\s+(\d+\.\d+\.\d+\.\d+)\s*//\s*(wg\d+)\s+(container\d+)\s+((\d+\.\d+\.\d+\.\d+\s+)+)manyip`) // address 172.19.47.56 // wg267 container62 8.210.66.177 8.210.66.178 manyip
+	if err == nil {
+		config = rege.ReplaceAllStringFunc(config, func(value string) string {
+			match := rege.FindStringSubmatch(value)
+			model := &manyipModel{
+				Interface: match[2],
+				Alias:     match[3],
+				CurrentIp: match[1],
+				ManyIp:    formatManyIp(fmt.Sprintf("%s %s", match[1], match[4])),
+			}
+			if manyipMap[model.Alias] != nil {
+				model.CurrentIp = manyipMap[model.Alias].CurrentIp
+			}
+			manyipMap[model.Alias] = model
+			return fmt.Sprintf(`address %s`, model.CurrentIp)
+		})
+	}
+	//
 	return fmt.Sprintf("%s\n%s", config, `// vyos-config-version: "bgp@2:broadcast-relay@1:cluster@1:config-management@1:conntrack@3:conntrack-sync@2:dhcp-relay@2:dhcp-server@6:dhcpv6-server@1:dns-forwarding@3:firewall@7:flow-accounting@1:https@3:interfaces@26:ipoe-server@1:ipsec@9:isis@1:l2tp@4:lldp@1:mdns@1:monitoring@1:nat@5:nat66@1:ntp@1:openconnect@2:ospf@1:policy@3:pppoe-server@5:pptp@2:qos@1:quagga@10:rpki@1:salt@1:snmp@2:ssh@2:sstp@4:system@25:vrf@3:vrrp@3:vyos-accel-ppp@2:wanloadbalance@3:webproxy@2"`)
+}
+
+// 多ip字符串格式化去重去空
+func formatManyIp(str string) string {
+	rege := regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`)
+	if rege == nil {
+		return ""
+	}
+	var ips []string
+	params := rege.FindAllStringSubmatch(str, -1)
+	for _, param := range params {
+		if !InArray(param[0], ips) {
+			ips = append(ips, param[0])
+		}
+	}
+	return strings.Join(ips, " ")
 }
 
 // 加载configure
