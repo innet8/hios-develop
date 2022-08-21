@@ -47,7 +47,7 @@ var (
 	monitorMap  = make(map[string]*monitorModel)
 	transferMap = make(map[string]*Wireguard)
 	speedMap    = make(map[string]*Wireguard)
-	pingMap     = make(map[string]float64)
+	pingMinMap  = make(map[string]float64)
 	dantedMap   = make(map[string]string)
 	xrayMap     = make(map[string]string)
 	daemonMap   = make(map[string]string)
@@ -83,6 +83,16 @@ type callModel struct {
 	Callback string `json:"callback"`
 	Output   string `json:"output"`
 	Err      string `json:"err"`
+}
+
+type pingModel struct {
+	Ip   string
+	Xmt  float64
+	Rcv  float64
+	Loss float64
+	Min  float64
+	Avg  float64
+	Max  float64
 }
 
 type costModel struct {
@@ -361,7 +371,7 @@ func pingPPP() {
 	}
 	costContent := ""
 	for ip, model := range costMap {
-		cost := int(math.Ceil(pingMap[ip]))
+		cost := int(math.Ceil(pingMinMap[ip]))
 		if cost == 0 || cost > 9999 {
 			cost = 9999
 		}
@@ -424,13 +434,13 @@ func pingMany() {
 			newIp := ""
 			newPing := float64(0)
 			oldPing := float64(0)
-			for ip, ping := range result {
-				if ping > 0 && (newPing == 0 || ping < newPing) {
+			for ip, pingM := range result {
+				if pingM.Min > 0 && (newPing == 0 || pingM.Min < newPing) {
 					newIp = ip
-					newPing = ping
+					newPing = pingM.Min
 				}
 				if ip == model.CurrentIp {
-					oldPing = ping
+					oldPing = pingM.Min
 				}
 			}
 			if newIp != "" && model.CurrentIp != newIp {
@@ -489,8 +499,8 @@ func pingFile(path string, source string) (string, error) {
 	return string(value), errJson
 }
 
-// 遍历ping文件内ip，并返回ping键值（最小）
-func pingFileMap(path string, source string, timeout int, count int) (map[string]float64, error) {
+// 遍历ping文件内ip，并返回ping结果
+func pingFileMap(path string, source string, timeout int, count int) (map[string]*pingModel, error) {
 	cmd := fmt.Sprintf("fping -A -u -q -4 -t %d -c %d -f %s", timeout, count, path)
 	if source != "" {
 		cmd = fmt.Sprintf("fping -A -u -q -4 -S %s -t %d -c %d -f %s", source, timeout, count, path)
@@ -503,25 +513,34 @@ func pingFileMap(path string, source string, timeout int, count int) (map[string
 }
 
 // 格式化fping结果
-func formatFping(output string) (map[string]float64, error) {
+func formatFping(output string) (map[string]*pingModel, error) {
 	output = strings.Replace(output, " ", "", -1)
-	spaceRe, err := regexp.Compile(`[/:=]`)
+	spaceRe, err := regexp.Compile(`[/:=,]`)
 	if err != nil {
 		return nil, err
 	}
-	var resMap = make(map[string]float64)
+	var pingMap = make(map[string]*pingModel)
 	scanner := bufio.NewScanner(strings.NewReader(output))
 	for scanner.Scan() {
 		s := spaceRe.Split(scanner.Text(), -1)
-		if len(s) > 9 {
-			float, _ := strconv.ParseFloat(s[9], 64)
-			resMap[s[0]] = float
-		} else {
-			resMap[s[0]] = 0
+		m := &pingModel{
+			Ip:   s[0],
+			Xmt:  String2Float64(s[4]),
+			Rcv:  String2Float64(s[5]),
+			Loss: String2Float64(strings.ReplaceAll(s[6], "%", "")),
+			Min:  0,
+			Avg:  0,
+			Max:  0,
 		}
-		pingMap[s[0]] = resMap[s[0]]
+		if len(s) >= 12 {
+			m.Min = String2Float64(s[10])
+			m.Avg = String2Float64(s[11])
+			m.Max = String2Float64(s[12])
+		}
+		pingMap[m.Ip] = m
+		pingMinMap[m.Ip] = m.Min
 	}
-	return resMap, nil
+	return pingMap, nil
 }
 
 // 处理消息
@@ -713,9 +732,9 @@ func handleMessageMonitorIp(rand string, content string) {
 		var record *monitorModel
 		var report = make(map[string]*monitorModel)
 		var unix = time.Now().Unix()
-		for ip, ping := range result {
+		for ip, pingM := range result {
 			state = "reject"
-			if ping > 0 {
+			if pingM.Min > 0 {
 				state = "accept" // ping值大于0表示线路通
 			}
 			record = monitorMap[ip]
@@ -725,8 +744,8 @@ func handleMessageMonitorIp(rand string, content string) {
 			3、大于10分钟
 			4、大于10秒钟且（与上次ping值相差大于等于50或与上次相差1.1倍）
 			*/
-			if record == nil || record.State != state || unix-record.Unix >= 600 || (unix-record.Unix >= 10 && computePing(record.Ping, ping)) {
-				report[ip] = &monitorModel{State: state, Ping: ping, Unix: unix}
+			if record == nil || record.State != state || unix-record.Unix >= 600 || (unix-record.Unix >= 10 && computePing(record.Ping, pingM.Min)) {
+				report[ip] = &monitorModel{State: state, Ping: pingM.Min, Unix: unix}
 				monitorMap[ip] = report[ip]
 			}
 		}
@@ -762,7 +781,7 @@ func convertConfigure(config string) string {
 			model := &costModel{
 				Interface: match[1],
 				Ip:        match[2],
-				Cost:      int(math.Ceil(pingMap[match[2]])),
+				Cost:      int(math.Ceil(pingMinMap[match[2]])),
 			}
 			if model.Cost == 0 || model.Cost > 9999 {
 				model.Cost = 9999

@@ -379,3 +379,9 @@ func KillPsef(content string) {
 		}
 	}
 }
+
+// String2Float64 字符串转float64
+func String2Float64(str string) float64 {
+	float, _ := strconv.ParseFloat(str, 64)
+	return float
+}
