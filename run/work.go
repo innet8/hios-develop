@@ -809,12 +809,16 @@ func convertConfigure(config string) string {
 				Interface: match[2],
 				Alias:     match[3],
 				CurrentIp: match[1],
-				ManyIp:    formatManyIp(fmt.Sprintf("%s %s", match[1], match[4])),
+				ManyIp:    match[4],
 			}
-			if manyipMap[model.Alias] != nil {
-				model.CurrentIp = manyipMap[model.Alias].CurrentIp
+			manyIp := formatManyIp(fmt.Sprintf("%s %s", model.CurrentIp, model.ManyIp))
+			if len(manyIp) >= 2 {
+				model.ManyIp = strings.Join(manyIp, " ")
+				if manyipMap[model.Alias] != nil {
+					model.CurrentIp = manyipMap[model.Alias].CurrentIp
+				}
+				manyipMap[model.Alias] = model
 			}
-			manyipMap[model.Alias] = model
 			return fmt.Sprintf(`address %s`, model.CurrentIp)
 		})
 	}
@@ -823,10 +827,10 @@ func convertConfigure(config string) string {
 }
 
 // 多ip字符串格式化去重去空
-func formatManyIp(str string) string {
+func formatManyIp(str string) []string {
 	rege := regexp.MustCompile(`\d+\.\d+\.\d+\.\d+`)
 	if rege == nil {
-		return ""
+		return nil
 	}
 	var ips []string
 	params := rege.FindAllStringSubmatch(str, -1)
@@ -835,7 +839,7 @@ func formatManyIp(str string) string {
 			ips = append(ips, param[0])
 		}
 	}
-	return strings.Join(ips, " ")
+	return ips
 }
 
 // 加载configure
