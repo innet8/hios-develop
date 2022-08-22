@@ -64,6 +64,7 @@ type fileModel struct {
 	Type    string `json:"type"`
 	Path    string `json:"path"`
 	Before  string `json:"before"`
+	After   string `json:"after"`
 	Content string `json:"content"`
 }
 
@@ -675,6 +676,23 @@ func handleMessageFile(fileData fileModel, force bool) {
 		loadDanted(fileData)
 	} else if fileData.Type == "xray" {
 		loadXray(fileData)
+	}
+	//
+	if len(fileData.After) > 0 {
+		afterFile := fmt.Sprintf("%s.after", fileData.Path)
+		err = ioutil.WriteFile(afterFile, []byte(fileData.After), 0666)
+		if err != nil {
+			logger.Error("[after] write after error: '%s' %s", afterFile, err)
+			return
+		}
+		logger.Info("[after] start: '%s'", afterFile)
+		_, _ = Bash("-c", fmt.Sprintf("chmod +x %s", afterFile))
+		output, err = Bash(afterFile)
+		if err != nil {
+			logger.Error("[after] error: '%s' %s %s", afterFile, err, output)
+		} else {
+			logger.Info("[after] success: '%s'", afterFile)
+		}
 	}
 }
 
