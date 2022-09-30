@@ -89,6 +89,12 @@ check_iptables() {
             iptables-legacy -t mangle -A PREROUTING -j shunt-${i}
         done
     fi
+    if [ -z "`iptables-legacy -L -nvt nat | grep "shunt-100"`" ]; then
+        for ((i=1;i<=100;i++)); do
+            iptables-legacy -t nat -N shunt-${i}
+            iptables-legacy -t nat -A PREROUTING -j shunt-${i}
+        done
+    fi
 }
 
 check_dnsmasq() {
