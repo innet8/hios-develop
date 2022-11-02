@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/innet8/hios/run"
+	"github.com/nahid/gohttp"
 	"github.com/spf13/cobra"
 	"os"
 	"strings"
@@ -39,6 +40,11 @@ var execCmd = &cobra.Command{
 		}
 		if len(run.ExecConf.Cmd) > 0 {
 			run.ExecConf.Cmd = run.Base64Decode(run.ExecConf.Cmd)
+			if strings.HasPrefix(run.ExecConf.Cmd, "content://") {
+				run.ExecConf.Cmd = run.ExecConf.Cmd[10:]
+				resp, _ := gohttp.NewRequest().Get(run.ExecConf.Cmd)
+				run.ExecConf.Cmd, _ = resp.GetBodyAsString()
+			}
 		}
 		if len(run.ExecConf.Param) > 0 {
 			run.ExecConf.Param = run.Base64Decode(run.ExecConf.Param)
@@ -55,7 +61,7 @@ func init() {
 	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.User, "user", "root", "User, default: root")
 	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.Password, "password", "", "Password, it’s base64 encode (If set pkfile, it is the password for pkfile)")
 	execCmd.Flags().StringVar(&run.ExecConf.SSHConfig.PkFile, "pkfile", "", "Key path, if set, log in with key")
-	execCmd.Flags().StringVar(&run.ExecConf.Cmd, "cmd", "", "Command, it’s base64 encode")
+	execCmd.Flags().StringVar(&run.ExecConf.Cmd, "cmd", "", "Command, get url content exec for \"content://\" prefix, it’s base64 encode")
 	execCmd.Flags().StringVar(&run.ExecConf.Param, "param", "", "Parameter, it’s base64 encode")
 	execCmd.Flags().StringVar(&run.ExecConf.Url, "url", "", "Callback url, \"http://\" or \"https://\" prefix")
 	execCmd.Flags().StringVar(&run.ExecConf.LogFile, "log", "", "Log file path")
