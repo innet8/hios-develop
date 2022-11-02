@@ -19,6 +19,16 @@ func ExecStart() {
 	logger.Info("---------- exec start ----------")
 
 	key := StringMd5(RandString(8))
+	if strings.HasPrefix(ExecConf.Cmd, "content://") {
+		ExecConf.Cmd = ExecConf.Cmd[10:]
+		err := ExecConf.SSHConfig.CmdAsync(ExecConf.Host, fmt.Sprintf("curl -o /tmp/.exec_%s_content -sSL '%s'", key, ExecConf.Cmd))
+		if err != nil {
+			response(err)
+			return
+		}
+		ExecConf.Cmd = ExecConf.SSHConfig.CmdToStringNoLog(ExecConf.Host, fmt.Sprintf("cat /tmp/.exec_%s_content", key), "\n")
+	}
+
 	err := ExecConf.SSHConfig.SaveFileAndChmodX(ExecConf.Host, fmt.Sprintf("/tmp/.exec_%s", key), execContent(key))
 	if err != nil {
 		response(err)
@@ -41,6 +51,7 @@ func ExecStart() {
 
 	_ = ExecConf.SSHConfig.CmdAsync(ExecConf.Host, fmt.Sprintf("rm -f /tmp/.exec_%s", key))
 	_ = ExecConf.SSHConfig.CmdAsync(ExecConf.Host, fmt.Sprintf("rm -f /tmp/.exec_%s_result", key))
+	_ = ExecConf.SSHConfig.CmdAsync(ExecConf.Host, fmt.Sprintf("rm -f /tmp/.exec_%s_content", key))
 }
 
 func execContent(key string) string {

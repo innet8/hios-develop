@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"github.com/innet8/hios/run"
-	"github.com/nahid/gohttp"
 	"github.com/spf13/cobra"
 	"os"
 	"strings"
@@ -40,11 +39,6 @@ var execCmd = &cobra.Command{
 		}
 		if len(run.ExecConf.Cmd) > 0 {
 			run.ExecConf.Cmd = run.Base64Decode(run.ExecConf.Cmd)
-			if strings.HasPrefix(run.ExecConf.Cmd, "content://") {
-				run.ExecConf.Cmd = run.ExecConf.Cmd[10:]
-				resp, _ := gohttp.NewRequest().Get(run.ExecConf.Cmd)
-				run.ExecConf.Cmd, _ = resp.GetBodyAsString()
-			}
 		}
 		if len(run.ExecConf.Param) > 0 {
 			run.ExecConf.Param = run.Base64Decode(run.ExecConf.Param)
