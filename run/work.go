@@ -801,6 +801,7 @@ func convertConfigure(config string) string {
 				Ip:        match[2],
 				Cost:      int(math.Ceil(pingMinMap[match[2]])),
 			}
+			model.Cost += 100 // 防止开销小于99
 			if model.Cost == 0 || model.Cost > 9999 {
 				model.Cost = 9999
 			}
