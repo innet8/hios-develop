@@ -48,7 +48,7 @@ func downloadLatest() string {
 	fmt.Println("the latest version is", version)
 	filename := runtime.GOOS + "-" + runtime.GOARCH + "-hios.tar.gz"
 	// download the latest package
-	downloadUrl := fmt.Sprintf("https://proxy.speedbox.ink/https://github.com/innet8/hios/releases/download/%s/%s", version, filename)
+	downloadUrl := fmt.Sprintf("https://github.com/innet8/hios/releases/download/%s/%s", version, filename)
 	fmt.Println("download package from ", downloadUrl)
 	resp, err := http.Get(downloadUrl)
 	if err != nil {
