@@ -218,6 +218,15 @@ func Base64Decode(data string) string {
 	return string(uDec)
 }
 
+// PaddingEqualSign Base64数据补等号
+func PaddingEqualSign(data string) string {
+	i := len(data) % 4
+	if i != 0 {
+		data += strings.Repeat("=", 4-i)
+	}
+	return data
+}
+
 // GetHostState 获取节点资源状态
 func GetHostState(lastState *State) *State {
 	now := time.Now()

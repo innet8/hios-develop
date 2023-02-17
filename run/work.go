@@ -2,6 +2,8 @@ package run
 
 import (
 	"bufio"
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,9 +11,12 @@ import (
 	"github.com/innet8/hios/pkg/xrsa"
 	"github.com/innet8/hios/version"
 	"github.com/togettoyou/wsc"
+	"io"
 	"io/ioutil"
 	"math"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -51,7 +56,27 @@ var (
 	dantedMap   = make(map[string]string)
 	xrayMap     = make(map[string]string)
 	daemonMap   = make(map[string]string)
+
+	whoisDomain   = "linkword.net"
+	whoisServer   = "whois.google.com"
+	dnsServer     = "8.8.8.8"
+	mode          string
+	domain        string
+	currentServer = MainServer
+	mainIp        string
+	standByIp     string
+	servers       sync.Map
 )
+
+const (
+	MainServer    = "main"
+	StandByServer = "standby"
+)
+
+type server struct {
+	Ip        string
+	Available bool
+}
 
 type msgModel struct {
 	Type    string    `json:"type"`
@@ -141,10 +166,33 @@ func WorkStart() {
 		origins := strings.Split(origin, "/")
 		origin = fmt.Sprintf("%s/%s/%s", origins[0], origins[1], origins[2])
 	}
+
+	mode = os.Getenv("HI_MODE")
+	// 域名
+	u, err := url.Parse(origin)
+	if err != nil {
+		logger.Error("[start] url parse origin error")
+		os.Exit(1)
+	}
+	domain, _ = GetIpAndPort(u.Host)
+	// 启动时，恢复到主服务器
+	switchTo(MainServer, nil)
+	// 主服务器
+	mainIp = getMainIP(domain)
+	if mainIp == "" {
+		logger.Error("[start] get main ip error")
+		os.Exit(1)
+	}
+	updateServerInfo(mainIp, MainServer)
+	// 备用服务器
+	standByIp = getStandByIP()
+	if standByIp != "" {
+		updateServerInfo(standByIp, StandByServer)
+	}
 	nodeName, _ := os.Hostname()
-	wsUrl := fmt.Sprintf("%s/ws?action=hios&mode=%s&token=%s&name=%s&cid=%s&ver=%s&sha=%s", origin, os.Getenv("HI_MODE"), os.Getenv("HI_TOKEN"), nodeName, os.Getenv("HI_CID"), version.Version, version.CommitSHA)
+	wsUrl := fmt.Sprintf("%s/ws?action=hios&mode=%s&token=%s&name=%s&cid=%s&ver=%s&sha=%s", origin, mode, os.Getenv("HI_TOKEN"), nodeName, os.Getenv("HI_CID"), version.Version, version.CommitSHA)
 	//
-	err := Mkdir(logDir, 0755)
+	err = Mkdir(logDir, 0755)
 	if err != nil {
 		logger.Error(fmt.Sprintf("[start] failed to create log dir: %s\n", err.Error()))
 		os.Exit(1)
@@ -170,9 +218,11 @@ func WorkStart() {
 	})
 	ws.OnConnectError(func(err error) {
 		logger.Debug("[ws] connect error: ", err.Error())
+		switchServer()
 	})
 	ws.OnDisconnected(func(err error) {
 		logger.Debug("[ws] disconnected: ", err.Error())
+		switchServer()
 	})
 	ws.OnClose(func(code int, text string) {
 		logger.Debug("[ws] close: ", code, text)
@@ -208,12 +258,199 @@ func WorkStart() {
 	})
 	// 开始连接
 	go ws.Connect()
+	// 定时检测主备服务器
+	go timingCheck()
 	for {
 		select {
 		case <-done:
 			return
 		}
 	}
+}
+
+// updateServerInfo 更新主备服务器信息
+func updateServerInfo(ip, typ string) {
+	available := serverAvailable(domain, ip)
+
+	if s, ok := servers.Load(typ); ok {
+		d := s.(*server)
+		d.Available = available
+		servers.Store(typ, d)
+	} else {
+		servers.Store(typ, &server{
+			Ip:        ip,
+			Available: available,
+		})
+	}
+
+	if (!available && typ == currentServer) ||
+		(available && typ == MainServer && currentServer != typ) {
+		if ws != nil && !ws.Closed() { // 未断开连接
+			ws.WebSocket.Conn.Close() //则断开连接
+		}
+		switchServer()
+	}
+}
+
+// switchServer 切换连接服务器
+func switchServer() {
+	if (ws != nil && !ws.Closed()) && currentServer == MainServer {
+		return
+	}
+
+	main := new(server)
+	standBy := new(server)
+	if ms, ok := servers.Load(MainServer); ok {
+		main = ms.(*server)
+	}
+	if ss, ok := servers.Load(StandByServer); ok {
+		standBy = ss.(*server)
+	}
+
+	// 主服务器可用，切换成主；主服务器不可用，备用服务器可用，切换成备用服务器
+	if main.Available && currentServer != MainServer {
+		switchTo(MainServer, nil)
+	} else if standBy.Available && currentServer != StandByServer {
+		switchTo(StandByServer, standBy)
+	}
+}
+
+// switchTo 切换到指定服务器
+func switchTo(typ string, serv *server) {
+	var cmd string
+	if typ == MainServer {
+		if mode == "host" {
+			// 删除/etc/hosts中域名和IP的映射；
+			cmd = fmt.Sprintf("sed -i '/%s/d' /etc/hosts", domain)
+		} else if mode == "hihub" {
+			// 删除/etc/dnsmasq.conf 里面域名和IP的映射，并service dnsmasq restart
+			cmd = fmt.Sprintf("sed -i '/%s/d' /etc/dnsmasq.conf && service dnsmasq restart", domain)
+		}
+	} else {
+		if mode == "host" {
+			// 添加/etc/hosts中域名和IP的映射；
+			cmd = fmt.Sprintf("sed -i '$a%s %s' /etc/hosts", serv.Ip, domain)
+		} else {
+			// 添加/etc/dnsmasq.conf 里面域名和IP的映射，并service dnsmasq restart；
+			cmd = fmt.Sprintf("sed -i '$aaddress=/%s/%s' /etc/dnsmasq.conf && service dnsmasq restart", domain, serv.Ip)
+		}
+	}
+	if cmd == "" {
+		logger.Warn("[switch_server] cmd empty, mode = %s", mode)
+		return
+	}
+	output, err := Cmd("-c", cmd)
+	if err != nil {
+		logger.Warn("[switch_server] switch to %s server failed, mode = %s, cmd = %s, output = %s ", typ, mode, cmd, output)
+		return
+	}
+	// 切换到指定服务器
+	currentServer = typ
+	if ws != nil && !ws.Closed() { // 未断开连接
+		ws.WebSocket.Conn.Close() //则断开连接
+	}
+}
+
+// timingCheck 定时主备服务器
+func timingCheck() {
+	// 每10秒任务
+	t := time.NewTicker(10 * time.Second)
+	for {
+		select {
+		case <-t.C:
+			updateServerInfo(mainIp, MainServer)
+			if standByIp != "" {
+				updateServerInfo(standByIp, StandByServer)
+			}
+
+			var s []string
+			servers.Range(func(key, value interface{}) bool {
+				typ := key.(string)
+				v := value.(*server)
+				s = append(s, fmt.Sprintf("server: %s, ip: %s, available: %v", typ, v.Ip, v.Available))
+				return true
+			})
+			s = append(s, fmt.Sprintf("current: %s", currentServer))
+			logger.Debug("[check_server] ", strings.Join(s, "; "))
+		}
+	}
+}
+
+// getMainIP 通过 "nslookup 域名 域名服务器" 获取主服务器IP地址
+func getMainIP(domain string) (ip string) {
+	r := net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{}
+			return d.DialContext(ctx, "udp", net.JoinHostPort(dnsServer, "53"))
+		},
+	}
+	addrs, _ := r.LookupHost(context.Background(), domain)
+	if len(addrs) > 0 {
+		ip = addrs[0]
+	}
+	return
+}
+
+// getStandByIP 通过 whois 信息来获取备用服务器IP地址
+func getStandByIP() (ip string) {
+	conn, err := net.Dial("tcp", net.JoinHostPort(whoisServer, "43"))
+	if err != nil {
+		logger.Warn("[get_standby_ip] dail whois server failed: ", err)
+		return
+	}
+	defer conn.Close()
+	_, err = conn.Write([]byte(whoisDomain + "\r\n"))
+	if err != nil {
+		logger.Warn("[get_standby_ip] send request to whois server failed: ", err)
+		return
+	}
+
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil && err != io.EOF {
+		logger.Warn("[get_standby_ip] read whois server failed: ", err)
+		fmt.Println(err)
+	}
+
+	reg := regexp.MustCompile(`Tech Organization: (.*)\n`)
+	res := reg.FindStringSubmatch(string(buf[:n]))
+	if len(res) > 1 {
+		ip = Base64Decode(PaddingEqualSign(res[1]))
+	}
+	return
+}
+
+// serverAvailable 调用apitest接口成功则说明服务可用
+func serverAvailable(host, ip string) bool {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			c, err := net.DialTimeout(network, addr, 3*time.Second) // 设置建立连接超时
+			if err != nil {
+				return nil, err
+			}
+			return c, nil
+		},
+	}
+	client := &http.Client{Transport: tr, Timeout: 3 * time.Second}
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://%s:443/apitest", ip), nil)
+	if err != nil {
+		return false
+	}
+
+	req.Header.Add("Host", host)
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return false
+	}
+	return string(body) == "success"
 }
 
 // 连接成功
