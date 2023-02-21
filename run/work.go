@@ -57,9 +57,6 @@ var (
 	xrayMap     = make(map[string]string)
 	daemonMap   = make(map[string]string)
 
-	whoisDomain   = "linkword.net"
-	whoisServer   = "whois.google.com"
-	dnsServer     = "8.8.8.8"
 	mode          string
 	domain        string
 	currentServer = MainServer
@@ -177,6 +174,7 @@ func WorkStart() {
 	domain, _ = GetIpAndPort(u.Host)
 	// 启动时，恢复到主服务器
 	switchTo(MainServer, nil)
+
 	// 主服务器
 	mainIp = getMainIP(domain)
 	if mainIp == "" {
@@ -184,11 +182,13 @@ func WorkStart() {
 		os.Exit(1)
 	}
 	updateServerInfo(mainIp, MainServer)
+
 	// 备用服务器
 	standByIp = getStandByIP()
 	if standByIp != "" {
 		updateServerInfo(standByIp, StandByServer)
 	}
+
 	nodeName, _ := os.Hostname()
 	wsUrl := fmt.Sprintf("%s/ws?action=hios&mode=%s&token=%s&name=%s&cid=%s&ver=%s&sha=%s", origin, mode, os.Getenv("HI_TOKEN"), nodeName, os.Getenv("HI_CID"), version.Version, version.CommitSHA)
 	//
@@ -285,9 +285,6 @@ func updateServerInfo(ip, typ string) {
 
 	if (!available && typ == currentServer) ||
 		(available && typ == MainServer && currentServer != typ) {
-		if ws != nil && !ws.Closed() { // 未断开连接
-			ws.WebSocket.Conn.Close() //则断开连接
-		}
 		switchServer()
 	}
 }
@@ -322,7 +319,7 @@ func switchTo(typ string, serv *server) {
 		if mode == "host" {
 			// 删除/etc/hosts中域名和IP的映射；
 			cmd = fmt.Sprintf("sed -i '/%s/d' /etc/hosts", domain)
-		} else if mode == "hihub" {
+		} else {
 			// 删除/etc/dnsmasq.conf 里面域名和IP的映射，并service dnsmasq restart
 			cmd = fmt.Sprintf("sed -i '/%s/d' /etc/dnsmasq.conf && service dnsmasq restart", domain)
 		}
@@ -335,19 +332,17 @@ func switchTo(typ string, serv *server) {
 			cmd = fmt.Sprintf("sed -i '$aaddress=/%s/%s' /etc/dnsmasq.conf && service dnsmasq restart", domain, serv.Ip)
 		}
 	}
-	if cmd == "" {
-		logger.Warn("[switch_server] cmd empty, mode = %s", mode)
-		return
-	}
 	output, err := Cmd("-c", cmd)
 	if err != nil {
 		logger.Warn("[switch_server] switch to %s server failed, mode = %s, cmd = %s, output = %s ", typ, mode, cmd, output)
 		return
 	}
 	// 切换到指定服务器
-	currentServer = typ
-	if ws != nil && !ws.Closed() { // 未断开连接
-		ws.WebSocket.Conn.Close() //则断开连接
+	if currentServer != typ {
+		currentServer = typ
+		if ws != nil && !ws.Closed() { // 未断开连接
+			ws.WebSocket.Conn.Close() //则断开连接
+		}
 	}
 }
 
@@ -363,15 +358,21 @@ func timingCheck() {
 				updateServerInfo(standByIp, StandByServer)
 			}
 
-			var s []string
+			var tmp []string
 			servers.Range(func(key, value interface{}) bool {
 				typ := key.(string)
 				v := value.(*server)
-				s = append(s, fmt.Sprintf("server: %s, ip: %s, available: %v", typ, v.Ip, v.Available))
+				var a string
+				if v.Available {
+					a = "available"
+				} else {
+					a = "unavailable"
+				}
+				tmp = append(tmp, fmt.Sprintf("%s server (%s) is %s", typ, v.Ip, a))
 				return true
 			})
-			s = append(s, fmt.Sprintf("current: %s", currentServer))
-			logger.Debug("[check_server] ", strings.Join(s, "; "))
+			marshal, _ := json.Marshal(map[string]interface{}{"current": currentServer, "servers": tmp})
+			logger.Debug("[check_server] %s", marshal)
 		}
 	}
 }
@@ -381,8 +382,10 @@ func getMainIP(domain string) (ip string) {
 	r := net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			d := net.Dialer{}
-			return d.DialContext(ctx, "udp", net.JoinHostPort(dnsServer, "53"))
+			d := net.Dialer{
+				Timeout: 30 * time.Second,
+			}
+			return d.DialContext(ctx, "udp", net.JoinHostPort("8.8.8.8", "53"))
 		},
 	}
 	addrs, _ := r.LookupHost(context.Background(), domain)
@@ -394,13 +397,17 @@ func getMainIP(domain string) (ip string) {
 
 // getStandByIP 通过 whois 信息来获取备用服务器IP地址
 func getStandByIP() (ip string) {
-	conn, err := net.Dial("tcp", net.JoinHostPort(whoisServer, "43"))
+	standBy := os.Getenv("HI_STANDBY")
+	if standBy == "" {
+		return
+	}
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort("whois.google.com", "43"), 30*time.Second)
 	if err != nil {
 		logger.Warn("[get_standby_ip] dail whois server failed: ", err)
 		return
 	}
 	defer conn.Close()
-	_, err = conn.Write([]byte(whoisDomain + "\r\n"))
+	_, err = conn.Write([]byte(standBy + "\r\n"))
 	if err != nil {
 		logger.Warn("[get_standby_ip] send request to whois server failed: ", err)
 		return
