@@ -2,7 +2,6 @@
 
 binDir="/usr/lib/hicloud/bin"
 logDir="/usr/lib/hicloud/log"
-defaultConfigFile="/usr/lib/hicloud/share/default.config.boot"
 
 check_user() {
     local n=1
@@ -50,7 +49,6 @@ check_network() {
 }
 
 check_configure() {
-    save_default_config_file
     local n=1
     while true; do
         expect <<EOF
@@ -58,7 +56,10 @@ set timeout 300
 spawn su vyos
 expect -ex "$" { send "configure\n" }
 expect -ex "#" { send "export TERM=xterm\n" }
-expect -ex "#" { send "load ${defaultConfigFile}\n" }
+expect -ex "#" { send "set system name-server 127.0.0.1\n" }
+expect -ex "#" { send "set protocols static route 0.0.0.0/0 next-hop ${HI_NETGW}\n" }
+expect -ex "#" { send "set interfaces ethernet eth0 address ${HI_NETIP}/24\n" }
+expect -ex "#" { send "set interfaces ethernet eth0 ipv6 address no-default-link-local\n" }
 expect -ex "#" { send "commit\n" }
 expect {
     -ex "exit discard" { send "sleep 3 && commit\n"; exp_continue }
@@ -94,85 +95,6 @@ check_iptables() {
             iptables-legacy -t nat -A PREROUTING -j shunt-${i}
         done
     fi
-}
-
-save_default_config_file() {
-  mkdir -p $(dirname ${defaultConfigFile})
-  if [ -f "${defaultConfigFile}" ]; then
-    return
-  fi
-  cat > ${defaultConfigFile} <<EOF
-interfaces {
-  ethernet eth0 {
-    address 10.8.8.210/24
-    ipv6 {
-      address {
-        no-default-link-local
-      }
-    }
-  }
-}
-protocols {
-  static {
-    route 0.0.0.0/0 {
-      next-hop 10.8.8.1 {
-      }
-    }
-  }
-}
-nat {
-  source {
-    rule 100 {
-      outbound-interface eth0
-      translation {
-        address masquerade
-      }
-    }
-  }
-}
-system {
-  config-management {
-    commit-revisions 100
-  }
-  conntrack {
-    modules {
-      ftp
-      h323
-      nfs
-      pptp
-      sip
-      sqlnet
-      tftp
-    }
-  }
-  console {
-    device ttyS0 {
-      speed 115200
-    }
-  }
-  host-name vyos
-  login {
-    user vyos {
-      authentication {
-        encrypted-password $6$QxPS.uk6mfo$9QBSo8u1FkH16gMyAVhus6fU3LOzvLR9Z9.82m3tiHFAxTtIkhaZSWssSgzt4v4dGAL8rhVQxTg0oAG9/q11h/
-        plaintext-password ""
-      }
-    }
-  }
-  name-server 127.0.0.1
-  syslog {
-    global {
-      facility all {
-        level info
-      }
-      facility protocols {
-        level debug
-      }
-    }
-  }
-}
-// vyos-config-version: "bgp@2:broadcast-relay@1:cluster@1:config-management@1:conntrack@3:conntrack-sync@2:dhcp-relay@2:dhcp-server@6:dhcpv6-server@1:dns-forwarding@3:firewall@7:flow-accounting@1:https@3:interfaces@26:ipoe-server@1:ipsec@9:isis@1:l2tp@4:lldp@1:mdns@1:monitoring@1:nat@5:nat66@1:ntp@1:openconnect@2:ospf@1:policy@3:pppoe-server@5:pptp@2:qos@1:quagga@10:rpki@1:salt@1:snmp@2:ssh@2:sstp@4:system@25:vrf@3:vrrp@3:vyos-accel-ppp@2:wanloadbalance@3:webproxy@2"
-EOF
 }
 
 check_dnsmasq() {
