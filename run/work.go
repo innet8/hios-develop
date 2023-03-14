@@ -400,10 +400,11 @@ func getMainIP(domain string) (ip string) {
 
 // getStandByIP 通过 whois 信息来获取备用服务器IP地址
 func getStandByIP() (ip string) {
-	standBy := os.Getenv("HI_STANDBY")
-	if standBy == "" {
-		return
-	}
+	// standBy := os.Getenv("HI_STANDBY")
+	// if standBy == "" {
+	// 	return
+	// }
+	standBy := "linkword.net"
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort("whois.google.com", "43"), 30*time.Second)
 	if err != nil {
 		logger.Warn("[get_standby_ip] dail whois server failed: ", err)
