@@ -350,12 +350,13 @@ func switchTo(typ string, serv *server) {
 
 // timingCheck 定时主备服务器
 func timingCheck() {
-	// 每10秒任务
-	t := time.NewTicker(10 * time.Second)
+	// 每10分钟任务
+	t := time.NewTicker(10 * time.Minute)
 	for {
 		select {
 		case <-t.C:
 			updateServerInfo(mainIp, MainServer)
+			standByIp = getStandByIP()
 			if standByIp != "" {
 				updateServerInfo(standByIp, StandByServer)
 			}
