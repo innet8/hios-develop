@@ -174,22 +174,23 @@ func WorkStart() {
 		os.Exit(1)
 	}
 	domain, _ = GetIpAndPort(u.Host)
-	// 启动时，恢复到主服务器
-	switchTo(MainServer, nil)
-
-	// 主服务器
-	mainIp = getMainIP(domain)
-	if mainIp == "" {
-		logger.Error("[start] get main ip error")
-		os.Exit(1)
-	}
-	updateServerInfo(mainIp, MainServer)
-
-	// 备用服务器
-	standByIp = getStandByIP()
-	if standByIp != "" {
-		updateServerInfo(standByIp, StandByServer)
-	}
+	// TODO 暂时取消切换主备IP
+	//// 启动时，恢复到主服务器
+	//switchTo(MainServer, nil)
+	//
+	//// 主服务器
+	//mainIp = getMainIP(domain)
+	//if mainIp == "" {
+	//	logger.Error("[start] get main ip error")
+	//	os.Exit(1)
+	//}
+	//updateServerInfo(mainIp, MainServer)
+	//
+	//// 备用服务器
+	//standByIp = getStandByIP()
+	//if standByIp != "" {
+	//	updateServerInfo(standByIp, StandByServer)
+	//}
 
 	nodeName, _ := os.Hostname()
 	wsUrl := fmt.Sprintf("%s/ws?action=hios&mode=%s&token=%s&name=%s&cid=%s&ver=%s&sha=%s", origin, mode, os.Getenv("HI_TOKEN"), nodeName, os.Getenv("HI_CID"), version.Version, version.CommitSHA)
@@ -220,11 +221,11 @@ func WorkStart() {
 	})
 	ws.OnConnectError(func(err error) {
 		logger.Debug("[ws] connect error: ", err.Error())
-		switchServer()
+		//switchServer() // TODO 暂时取消切换主备IP
 	})
 	ws.OnDisconnected(func(err error) {
 		logger.Debug("[ws] disconnected: ", err.Error())
-		switchServer()
+		//switchServer() // TODO 暂时取消切换主备IP
 	})
 	ws.OnClose(func(code int, text string) {
 		logger.Debug("[ws] close: ", code, text)
@@ -261,7 +262,7 @@ func WorkStart() {
 	// 开始连接
 	go ws.Connect()
 	// 定时检测主备服务器
-	go timingCheck()
+	//go timingCheck() // TODO 暂时取消切换主备IP
 	for {
 		select {
 		case <-done:
