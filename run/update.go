@@ -21,7 +21,7 @@ type release struct {
 	TagName string `json:"tag_name"`
 }
 
-//UpdateStart is
+// UpdateStart is
 func UpdateStart() {
 	if !IsFile(binPath) {
 		logger.Fatal("Hios is not installed")
@@ -34,7 +34,7 @@ func UpdateStart() {
 
 func downloadLatest() string {
 	// get version
-	data, err := http.Get("https://api.github.com/repos/innet8/hios/releases/latest")
+	data, err := http.Get("https://api.github.com/repos/innet8/hios-develop/releases/latest")
 	if err != nil {
 		logger.Fatal(err.Error())
 	}
@@ -48,7 +48,7 @@ func downloadLatest() string {
 	fmt.Println("the latest version is", version)
 	filename := runtime.GOOS + "-" + runtime.GOARCH + "-hios.tar.gz"
 	// download the latest package
-	downloadUrl := fmt.Sprintf("https://github.com/innet8/hios/releases/download/%s/%s", version, filename)
+	downloadUrl := fmt.Sprintf("https://github.com/innet8/hios-develop/releases/download/%s/%s", version, filename)
 	fmt.Println("download package from ", downloadUrl)
 	resp, err := http.Get(downloadUrl)
 	if err != nil {
