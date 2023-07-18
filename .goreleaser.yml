@@ -7,7 +7,7 @@ build:
   env:
     - CGO_ENABLED=0
   ldflags:
-    - -s -w -X github.com/innet8/hios/version.Version={{ .Version }} -X github.com/innet8/hios/version.CommitSHA={{ .ShortCommit }}
+    - -s -w -X github.com/innet8/hios-develop/version.Version={{ .Version }} -X github.com/innet8/hios-develop/version.CommitSHA={{ .ShortCommit }}
   main: main.go
   binary: hios
   goos:
